@@ -1,9 +1,8 @@
 # voto-db
 
-Plataforma de coleta, armazenamento, catalogação e cruzamento de dados angariados primariamente de fontes oficiais do governo brasileiro, com fim de facilitar o acesso ao histórico e perfil de parlamentares e partidos.
+Plataforma de coleta, armazenamento, catalogação e cruzamento de dados angariados primariamente de fontes oficiais do governo brasileiro, com o fim de facilitar o acesso ao histórico e perfil de parlamentares e partidos.
 
-
-## mvp - transparencia
+## MVP - Transparência
 
 ### Perfil Individual do Deputado
 - Nome, partido, estado
@@ -23,22 +22,18 @@ Plataforma de coleta, armazenamento, catalogação e cruzamento de dados angaria
 - Comparação com outros partidos
 - Leis que o partido apoiou vs rejeitou
 
-
-## Nice to have
-
-### Busca e Filtros
+### Busca e Filtros (nice to have)
 - Buscar deputado/partido por nome
 - Filtrar votações por tema/período
 - Filtrar por tipo de proposição (PL, PEC, etc.)
 
-### API Básica
-- Endpoint para votações de um deputado
-- Endpoint para resultado de uma votação específica
-- Dados em JSON
+## Problemas
 
+- API 'dados abertos' passa por timeouts frequentes, múltiplos (2-4) requests são necessários para conseguir uma resposta.
+- Descobrir uma forma simples de listar os principais projetos de lei e vinculá-los aos seus respectivos IDs para possibilitar as buscas subsequentes.
 
-#### Links uteis
+## Links úteis
 
-https://dadosabertos.camara.leg.br/swagger/api.html
-https://www2.camara.leg.br/transparencia/dados-abertos/dados-abertos-legislativo/webservices
+https://dadosabertos.camara.leg.br/swagger/api.html  
+https://www2.camara.leg.br/transparencia/dados-abertos/dados-abertos-legislativo/webservices  
 https://www.camara.leg.br/proposicoesWeb
