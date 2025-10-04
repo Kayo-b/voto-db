@@ -132,3 +132,10 @@ xkit==0.0.0
 yarl==1.8.2
 yt-dlp==2024.4.9
 zipp==1.0.0
+
+# Added for deputados API
+fastapi==0.104.1
+uvicorn==0.24.0
+redis==5.0.1
+requests==2.31.0
+python-dotenv==1.0.0
