@@ -30,6 +30,9 @@ export interface Votacao {
 }
 
 export interface VotacoesResponse {
+  success?: boolean;
   dados: Votacao[];
+  total?: number;
+  cached?: boolean;
   links: Array<{ rel: string; href: string }>;
 }

@@ -1,0 +1,264 @@
+{
+  "votacoes_historicas": [
+    {
+      "tipo": "PEC",
+      "numero": "241/2016",
+      "casa_origem": "Câmara",
+      "numero_senado": "PEC 55/2016",
+      "titulo": "Teto de Gastos Públicos",
+      "emenda_constitucional": "EC 95/2016",
+      "id_proposicao": "2088351",
+      "id_votacao_principal": "7214",
+      "data_aprovacao": "2016-12-15",
+      "relevancia": "alta",
+      "impacto": "Limitou crescimento dos gastos públicos por 20 anos"
+    },
+    {
+      "tipo": "PL",
+      "numero": "6787/2016",
+      "casa_origem": "Câmara",
+      "titulo": "Reforma Trabalhista",
+      "lei": "Lei 13.467/2017",
+      "id_proposicao": "2122076",
+      "id_votacao_principal": "7492",
+      "data_aprovacao": "2017-07-13",
+      "relevancia": "alta",
+      "impacto": "Alterou 117 pontos da CLT"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "6/2019",
+      "casa_origem": "Câmara",
+      "titulo": "Reforma da Previdência",
+      "emenda_constitucional": "EC 103/2019",
+      "id_proposicao": "2192459",
+      "data_aprovacao": "2019-11-12",
+      "relevancia": "alta",
+      "impacto": "Estabeleceu idade mínima para aposentadoria"
+    },
+    {
+      "tipo": "PL",
+      "numero": "490/2007",
+      "casa_origem": "Câmara",
+      "numero_senado": "PL 2903/2023",
+      "titulo": "Marco Temporal das Terras Indígenas",
+      "lei": "Lei 14.701/2023",
+      "id_proposicao": "345311",
+      "data_aprovacao": "2023-12-14",
+      "relevancia": "alta",
+      "impacto": "Estabeleceu marco temporal de 1988 para demarcação"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "45/2019",
+      "casa_origem": "Câmara",
+      "titulo": "Reforma Tributária",
+      "emenda_constitucional": "EC 132/2023",
+      "id_proposicao": "2196833",
+      "data_aprovacao": "2023-12-20",
+      "relevancia": "alta",
+      "impacto": "Unificou 5 tributos em IBS e CBS"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "23/2021",
+      "casa_origem": "Câmara",
+      "titulo": "PEC dos Precatórios",
+      "emenda_constitucional": "EC 113-114/2021",
+      "id_proposicao": "2293449",
+      "data_aprovacao": "2021-12-16",
+      "relevancia": "alta",
+      "impacto": "Limitou pagamento de dívidas judiciais"
+    },
+    {
+      "tipo": "PL",
+      "numero": "2630/2020",
+      "casa_origem": "Senado",
+      "titulo": "Lei das Fake News",
+      "status": "Em tramitação",
+      "id_proposicao": "2256735",
+      "relevancia": "alta",
+      "impacto": "Lei de combate à desinformação"
+    },
+    {
+      "tipo": "PL",
+      "numero": "1066/2020",
+      "casa_origem": "Câmara",
+      "titulo": "Auxílio Emergencial",
+      "lei": "Lei 13.982/2020",
+      "data_aprovacao": "2020-04-02",
+      "relevancia": "alta",
+      "impacto": "Auxílio de R$ 600 durante pandemia"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "93/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Arcabouço Fiscal",
+      "lei": "LC 200/2023",
+      "id_proposicao": "2357053",
+      "data_aprovacao": "2023-08-30",
+      "relevancia": "alta",
+      "impacto": "Substituiu o teto de gastos"
+    },
+    {
+      "tipo": "PL",
+      "numero": "1085/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Igualdade Salarial",
+      "lei": "Lei 14.611/2023",
+      "id_proposicao": "2351179",
+      "data_aprovacao": "2023-07-03",
+      "relevancia": "média",
+      "impacto": "Equiparação salarial entre gêneros"
+    },
+    {
+      "tipo": "PL",
+      "numero": "2384/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Desempate no CARF",
+      "lei": "Lei 14.689/2023",
+      "id_proposicao": "2360503",
+      "data_aprovacao": "2023-10-16",
+      "relevancia": "média",
+      "impacto": "Voto de qualidade em julgamentos fiscais"
+    },
+    {
+      "tipo": "PL",
+      "numero": "2685/2022",
+      "casa_origem": "Câmara",
+      "titulo": "Desenrola Brasil",
+      "lei": "Lei 14.690/2023",
+      "id_proposicao": "2336393",
+      "data_aprovacao": "2023-11-30",
+      "relevancia": "média",
+      "impacto": "Programa de renegociação de dívidas"
+    },
+    {
+      "tipo": "PL",
+      "numero": "3626/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Taxação das Apostas Esportivas",
+      "lei": "Lei 14.790/2023",
+      "id_proposicao": "2374400",
+      "data_aprovacao": "2023-12-29",
+      "relevancia": "média",
+      "impacto": "Regulamentação das bets"
+    },
+    {
+      "tipo": "PL",
+      "numero": "4173/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Taxação de Super-ricos",
+      "lei": "Lei 14.754/2023",
+      "id_proposicao": "2383287",
+      "data_aprovacao": "2023-12-28",
+      "relevancia": "média",
+      "impacto": "Tributação de offshores"
+    },
+    {
+      "tipo": "PL",
+      "numero": "3268/2021",
+      "casa_origem": "Câmara",
+      "titulo": "Dia da Consciência Negra",
+      "lei": "Lei 14.759/2023",
+      "id_proposicao": "2299903",
+      "data_aprovacao": "2023-12-21",
+      "relevancia": "média",
+      "impacto": "Feriado nacional em 20 de novembro"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "68/2024",
+      "casa_origem": "Câmara",
+      "titulo": "Regulamentação da Reforma Tributária",
+      "status": "Aprovado",
+      "id_proposicao": "2430143",
+      "data_aprovacao": "2024-12-17",
+      "relevancia": "alta",
+      "impacto": "Detalhamento do IBS e CBS"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "9/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Anistia para Partidos",
+      "status": "Em tramitação",
+      "id_proposicao": "2352476",
+      "relevancia": "média",
+      "impacto": "Perdão de multas eleitorais"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "177/2023",
+      "casa_origem": "Câmara",
+      "titulo": "Aumento no Número de Deputados",
+      "status": "Em tramitação",
+      "relevancia": "média",
+      "impacto": "De 513 para 531 deputados"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "192/2023",
+      "casa_origem": "Senado",
+      "titulo": "Flexibilização da Lei de Ficha Limpa",
+      "status": "Aprovado Senado",
+      "data_votacao": "2025-09-03",
+      "relevancia": "alta",
+      "impacto": "Reduz prazo de inelegibilidade"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "3/2021",
+      "casa_origem": "Câmara",
+      "titulo": "PEC da Blindagem",
+      "status": "Aprovado destaque",
+      "data_votacao": "2025-09-16",
+      "relevancia": "alta",
+      "impacto": "Votação secreta para processos contra parlamentares"
+    },
+    {
+      "tipo": "PL",
+      "numero": "2159/2021",
+      "casa_origem": "Câmara",
+      "numero_senado": "PL 2159/2021",
+      "titulo": "Licenciamento Ambiental",
+      "status": "Em tramitação Senado",
+      "id_proposicao": "148785",
+      "relevancia": "alta",
+      "impacto": "Lei geral de licenciamento ambiental"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "125/2022",
+      "casa_origem": "Senado",
+      "titulo": "Código de Defesa do Contribuinte",
+      "status": "Aprovado Senado",
+      "data_votacao": "2025-09-03",
+      "relevancia": "média",
+      "impacto": "Direitos e garantias aos contribuintes"
+    },
+    {
+      "tipo": "PL",
+      "numero": "5384/2020",
+      "casa_origem": "Câmara",
+      "titulo": "Lei de Cotas",
+      "lei": "Lei 14.723/2023",
+      "id_proposicao": "159365",
+      "data_aprovacao": "2023-11-13",
+      "relevancia": "alta",
+      "impacto": "Renovação do sistema de cotas"
+    }
+  ],
+  "metadata": {
+    "total_proposicoes": 23,
+    "periodo": "2015-2025",
+    "fontes": [
+      "API Câmara dos Deputados",
+      "API Senado Federal",
+      "Ranking dos Políticos",
+      "Voz Ativa"
+    ],
+    "ultima_atualizacao": "2025-01-01"
+  }
+}

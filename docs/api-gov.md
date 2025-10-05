@@ -20,3 +20,14 @@ Chegando aos dados sobre votos de parlamentres em uma proposicao(PL,PEC etc)
 
 3. Lista de quem e como votou
     >  /api/v2/votacoes/{idVotacao}/votos 
+
+### Caminhos alternativos 
+
+0. listar proposicoes relevantes manualmente 
+ 0.1 - > pelo numero/ano buscar em: /proposicoes?ordem=DESC&ordenarPor=id&siglaTipo=REQ&numero=2307&ano=2007 
+  -> lista de proposicoes localizada em backend/data/proposicoes.json
+ 0.2 -> descobrir o id da proposicao
+ 0.3 -> com o id da proposicao buscar o id da votacao: proposicoes/2566856/votacoes
+ 0.4 -> com o id da votacao buscar os votos individuais: /votacoes/2566856-5/votos
+1. listar votacoes urgentes e textos finais
+2. listar  

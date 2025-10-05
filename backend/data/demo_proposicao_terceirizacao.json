@@ -1,0 +1,171 @@
+{
+  "proposicao": {
+    "id": 2122076,
+    "tipo": "PL",
+    "numero": 6787,
+    "ano": 2016,
+    "titulo": "Lei da Terceirização",
+    "relevancia": "alta",
+    "ementa": "Altera o Decreto-Lei nº 5.452, de 1º de maio de 1943 - Consolidação das Leis do Trabalho",
+    "situacao": "Transformado na Lei Ordinária 13429/2017"
+  },
+  "votacao_principal": {
+    "id": "2122076-348",
+    "descricao": "Votação do texto-base do Substitutivo da Comissão Especial ao Projeto de Lei",
+    "data": "2017-03-22T19:45:00",
+    "aprovacao": true,
+    "total_votos": 487
+  },
+  "votos": [
+    {
+      "deputado_": {
+        "id": 178864,
+        "nome": "André Figueiredo",
+        "siglaPartido": "PDT",
+        "siglaUf": "CE"
+      },
+      "tipoVoto": "Não"
+    },
+    {
+      "deputado_": {
+        "id": 74693,
+        "nome": "Antonio Carlos Mendes Thame",
+        "siglaPartido": "PV",
+        "siglaUf": "SP"
+      },
+      "tipoVoto": "Sim"
+    },
+    {
+      "deputado_": {
+        "id": 178957,
+        "nome": "Átila Lira",
+        "siglaPartido": "PSB",
+        "siglaUf": "PI"
+      },
+      "tipoVoto": "Sim"
+    },
+    {
+      "deputado_": {
+        "id": 178976,
+        "nome": "Benedita da Silva",
+        "siglaPartido": "PT",
+        "siglaUf": "RJ"
+      },
+      "tipoVoto": "Não"
+    },
+    {
+      "deputado_": {
+        "id": 178979,
+        "nome": "Beto Mansur",
+        "siglaPartido": "PRB",
+        "siglaUf": "SP"
+      },
+      "tipoVoto": "Sim"
+    },
+    {
+      "deputado_": {
+        "id": 178980,
+        "nome": "Carlos Zarattini",
+        "siglaPartido": "PT",
+        "siglaUf": "SP"
+      },
+      "tipoVoto": "Não"
+    },
+    {
+      "deputado_": {
+        "id": 161549,
+        "nome": "Eduardo Bolsonaro",
+        "siglaPartido": "PSL",
+        "siglaUf": "SP"
+      },
+      "tipoVoto": "Sim"
+    },
+    {
+      "deputado_": {
+        "id": 74847,
+        "nome": "Jair Bolsonaro",
+        "siglaPartido": "PSL",
+        "siglaUf": "RJ"
+      },
+      "tipoVoto": "Sim"
+    },
+    {
+      "deputado_": {
+        "id": 178983,
+        "nome": "Jean Wyllys",
+        "siglaPartido": "PSOL",
+        "siglaUf": "RJ"
+      },
+      "tipoVoto": "Não"
+    },
+    {
+      "deputado_": {
+        "id": 178984,
+        "nome": "João Derly",
+        "siglaPartido": "REDE",
+        "siglaUf": "RS"
+      },
+      "tipoVoto": "Abstenção"
+    }
+  ],
+  "estatisticas_votacao": {
+    "total_deputados": 10,
+    "distribuicao_votos": {
+      "Sim": 5,
+      "Não": 4,
+      "Abstenção": 1,
+      "Obstrução": 0
+    },
+    "por_partido": {
+      "PDT": {
+        "Sim": 0,
+        "Não": 1,
+        "Abstenção": 0,
+        "total": 1
+      },
+      "PV": {
+        "Sim": 1,
+        "Não": 0,
+        "Abstenção": 0,
+        "total": 1
+      },
+      "PSB": {
+        "Sim": 1,
+        "Não": 0,
+        "Abstenção": 0,
+        "total": 1
+      },
+      "PT": {
+        "Sim": 0,
+        "Não": 2,
+        "Abstenção": 0,
+        "total": 2
+      },
+      "PRB": {
+        "Sim": 1,
+        "Não": 0,
+        "Abstenção": 0,
+        "total": 1
+      },
+      "PSL": {
+        "Sim": 2,
+        "Não": 0,
+        "Abstenção": 0,
+        "total": 2
+      },
+      "PSOL": {
+        "Sim": 0,
+        "Não": 1,
+        "Abstenção": 0,
+        "total": 1
+      },
+      "REDE": {
+        "Sim": 0,
+        "Não": 0,
+        "Abstenção": 1,
+        "total": 1
+      }
+    }
+  },
+  "processado_em": "2025-10-05T14:34:19.872681"
+}

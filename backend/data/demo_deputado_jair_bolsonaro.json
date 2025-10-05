@@ -1,0 +1,27 @@
+{
+  "deputado": {
+    "id": 74847,
+    "nome": "Jair Messias Bolsonaro",
+    "nome_parlamentar": "JAIR BOLSONARO",
+    "partido": "PSL",
+    "uf": "RJ",
+    "situacao": "Exercício"
+  },
+  "historico_votacoes": [
+    {
+      "proposicao": "PL 6787/2016",
+      "titulo": "Lei da Terceirização",
+      "voto": "Sim",
+      "data": "2017-03-22T19:45:00",
+      "relevancia": "alta"
+    }
+  ],
+  "estatisticas": {
+    "total_votacoes_analisadas": 1,
+    "participacao": 1,
+    "presenca_percentual": 100.0,
+    "votos_favoraveis": 1,
+    "votos_contrarios": 0
+  },
+  "analisado_em": "2025-10-05T14:34:19.873208"
+}

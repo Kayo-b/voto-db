@@ -1,0 +1,27 @@
+{
+  "deputado": {
+    "id": 178976,
+    "nome": "Benedita Souza da Silva Sampaio",
+    "nome_parlamentar": "BENEDITA DA SILVA",
+    "partido": "PT",
+    "uf": "RJ",
+    "situacao": "Exercício"
+  },
+  "historico_votacoes": [
+    {
+      "proposicao": "PL 6787/2016",
+      "titulo": "Lei da Terceirização",
+      "voto": "Não",
+      "data": "2017-03-22T19:45:00",
+      "relevancia": "alta"
+    }
+  ],
+  "estatisticas": {
+    "total_votacoes_analisadas": 1,
+    "participacao": 1,
+    "presenca_percentual": 100.0,
+    "votos_favoraveis": 0,
+    "votos_contrarios": 1
+  },
+  "analisado_em": "2025-10-05T14:34:19.873338"
+}

@@ -18,10 +18,20 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
       setError('');
       try {
         const response = await api.getDeputadoVotacoes(deputado.id);
-        setVotacoes(response.dados || []);
+        
+        if (response.success === false && response.dados.length === 0) {
+          setError('Não foi possível carregar as votações recentes. Dados podem não estar disponíveis.');
+          setVotacoes([]);
+        } else {
+          setVotacoes(response.dados || []);
+          if (response.cached) {
+            console.log('Dados carregados do cache');
+          }
+        }
       } catch (error) {
         console.error('Erro ao buscar votações:', error);
-        setError('Erro ao buscar votações. Tente novamente.');
+        setError('Erro na conexão. Tente novamente mais tarde.');
+        setVotacoes([]);
       }
       setLoading(false);
     };
@@ -77,25 +87,39 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-2xl font-bold mb-4">Votações Recentes</h2>
+        <h2 className="text-2xl font-bold mb-2">Votações em Proposições Relevantes</h2>
+        <p className="text-gray-600 text-sm mb-4">
+          Histórico de votações do deputado em proposições de alta relevância social e política
+        </p>
         
         {loading && (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando votações...</p>
+            <p className="mt-4 text-gray-600">Carregando votações relevantes...</p>
           </div>
         )}
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+            <p className="font-semibold">ℹ️ Informação</p>
+            <p>{error}</p>
+            <p className="text-sm mt-2">
+              As votações são baseadas em proposições pré-selecionadas de alta relevância. 
+              Dados podem não estar disponíveis para todos os deputados.
+            </p>
           </div>
         )}
 
         {!loading && !error && votacoes.length === 0 && (
-          <p className="text-gray-500 text-center py-8">
-            Nenhuma votação encontrada.
-          </p>
+          <div className="text-center py-8">
+            <p className="text-gray-500 mb-2">
+              Não há registros de votações deste deputado nas proposições relevantes analisadas.
+            </p>
+            <p className="text-gray-400 text-sm">
+              Isso pode ocorrer se o deputado não participou das votações principais ou 
+              se os dados ainda não foram processados.
+            </p>
+          </div>
         )}
 
         {!loading && votacoes.length > 0 && (
