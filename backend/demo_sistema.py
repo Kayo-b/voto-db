@@ -156,7 +156,6 @@ class DemoAnaliseVotacoes:
     def analisar_deputado_demo(self, deputado_id: int, proposicoes_analisadas: List[Dict]) -> Dict:
         """Análise demo de um deputado"""
         
-        # Dados simulados de deputados
         deputados_info = {
             178864: {
                 "nome": "André Figueiredo",
@@ -185,7 +184,6 @@ class DemoAnaliseVotacoes:
         if not deputado_info:
             return {"erro": "Deputado não encontrado"}
         
-        # Analisar votos em proposições
         historico_votacoes = []
         total_votacoes = 0
         votos_favor = 0
@@ -194,7 +192,6 @@ class DemoAnaliseVotacoes:
             proposicao = prop_data['proposicao']
             votos = prop_data.get('votos', [])
             
-            # Encontrar voto deste deputado
             voto_deputado = None
             for voto in votos:
                 dep_data = voto.get('deputado_', {})
@@ -217,7 +214,6 @@ class DemoAnaliseVotacoes:
                     "relevancia": proposicao['relevancia']
                 })
         
-        # Calcular estatísticas
         presenca = (total_votacoes / len(proposicoes_analisadas) * 100) if proposicoes_analisadas else 0
         
         return {
@@ -254,7 +250,6 @@ def main():
     
     demo = DemoAnaliseVotacoes()
     
-    # Dados da proposição simulada
     print("\nANÁLISE DE PROPOSIÇÃO")
     print("-" * 40)
     
@@ -284,10 +279,8 @@ def main():
         noes = votos_partido['Não']
         print(f"   {partido}: {sims} Sim, {noes} Não (total: {total_partido})")
     
-    # Salvar dados da proposição
     demo.salvar_dados(resultado, "demo_proposicao_terceirizacao.json")
     
-    # Análise de deputados específicos
     print(f"\nANÁLISE DE DEPUTADOS")
     print("-" * 40)
     
@@ -312,13 +305,11 @@ def main():
                 voto_terceirizacao = historico[0]
                 print(f"   Voto na Lei da Terceirização: {voto_terceirizacao['voto']}")
             
-            # Salvar análise do deputado
             filename = f"demo_deputado_{dep_info['nome_parlamentar'].replace(' ', '_').lower()}.json"
             demo.salvar_dados(analise, filename)
         else:
-            print(f"   ❌ {analise['erro']}")
+            print(f" {analise['erro']}")
     
-    # Resumo final
     print(f"\nDemo concluída!")
     print("=" * 60)
     
@@ -339,7 +330,7 @@ def main():
             tamanho = os.path.getsize(caminho) / 1024  # KB
             print(f"   {arquivo} ({tamanho:.1f} KB)")
     except Exception as e:
-        print(f"❌ Erro ao listar arquivos: {e}")
+        print(f"Erro ao listar arquivos: {e}")
     
     print(f"\nSistema pronto para uso!")
     print(f"   • Use os endpoints da API para consultas em tempo real")

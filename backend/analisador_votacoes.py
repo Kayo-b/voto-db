@@ -194,18 +194,22 @@ class AnalisadorVotacoes:
         Returns:
             Dados completos da proposição processada
         """
-        print(f"\n{'='*60}")
-        print(f"PROCESSANDO: {tipo} {numero}/{ano} - {titulo}")
-        print(f"{'='*60}")
-        
-
-        proposicao = self.buscar_proposicao(tipo, numero, ano)
-        if not proposicao:
-            print(f"❌ Proposição não encontrada: {tipo} {numero}/{ano}")
+        try:
+            print(f"\n{'='*60}")
+            print(f"PROCESSANDO: {tipo} {numero}/{ano} - {titulo}")
+            print(f"{'='*60}")
+            
+            print('Iniciando processamento da proposição...')
+            proposicao = self.buscar_proposicao(tipo, numero, ano)
+            if not proposicao:
+                print(f"Proposição não encontrada: {tipo} {numero}/{ano}")
+                return None
+            
+            id_proposicao = proposicao['id']
+            print(f"Proposição encontrada - ID: {id_proposicao}")
+        except Exception as e:
+            print(f"Erro ao buscar proposição {tipo} {numero}/{ano}: {str(e)}")
             return None
-        
-        id_proposicao = proposicao['id']
-        print(f"Proposição encontrada - ID: {id_proposicao}")
         
 
         detalhes = self.buscar_detalhes_proposicao(id_proposicao)
@@ -217,7 +221,7 @@ class AnalisadorVotacoes:
 
         votacao_principal = self.identificar_votacao_principal(votacoes)
         if not votacao_principal:
-            print("❌ Votação principal não encontrada")
+            print("Votação principal não encontrada")
             return None
         
         id_votacao = votacao_principal['id']
@@ -227,7 +231,7 @@ class AnalisadorVotacoes:
         
 
         votos = self.buscar_votos_votacao(id_votacao)
-        print(f"🗳️  Coletados {len(votos)} votos individuais")
+        print(f"Coletados {len(votos)} votos individuais")
         
 
         resultado = {
@@ -293,11 +297,13 @@ class AnalisadorVotacoes:
     def carregar_dados(self, arquivo: str) -> Dict:
         """Carrega dados de arquivo JSON"""
         filepath = os.path.join(self.data_dir, arquivo)
+        print("Carregando dados de: filepath",filepath)
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
+                print("Dados carregados com sucesso.",f)
                 return json.load(f)
         except FileNotFoundError:
-            return {}
+            return {'ARQUIVO_NAO_ENCONTRADO': True}
     
     def analisar_deputado(self, deputado_id: int, proposicoes_analisadas: List[Dict]) -> Dict:
         """
@@ -328,7 +334,6 @@ class AnalisadorVotacoes:
             proposicao = prop_data['proposicao']
             votos = prop_data.get('votos', [])
             
-            # Encontrar voto deste deputado
             voto_deputado = None
             for voto in votos:
                 dep_data = voto.get('deputado_', {})
@@ -351,7 +356,6 @@ class AnalisadorVotacoes:
                     "relevancia": proposicao['relevancia']
                 })
         
-        # Calcular estatísticas
         presenca = (total_votacoes / len(proposicoes_analisadas) * 100) if proposicoes_analisadas else 0
         
         return {
@@ -375,11 +379,9 @@ class AnalisadorVotacoes:
         }
 
 
-# Exemplo de uso
 if __name__ == "__main__":
     analisador = AnalisadorVotacoes()
     
-    # Exemplo: processar uma proposição
     resultado = analisador.processar_proposicao_completa(
         tipo="PL",
         numero=6787,

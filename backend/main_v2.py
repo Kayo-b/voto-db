@@ -19,10 +19,9 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Redis connection
 try:
     r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
-    r.ping()  # Test connection
+    r.ping() 
 except:
     r = None
     print("Redis não disponível - cache desabilitado")
@@ -371,44 +370,220 @@ async def get_votos_votacao(votacao_id: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votos: {str(e)}")
 
 @app.get("/deputados/{deputado_id}/analise")
-async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = False):
+async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True, limite_proposicoes: int = None, usar_cache: bool = True):
     try:
+        # Verificar cache primeiro
+        cache_key = f"analise_completa:{deputado_id}:{limite_proposicoes or 'todas'}"
+        
+        if usar_cache and r:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    print(f"Análise encontrada no cache para deputado {deputado_id}")
+                    return {
+                        "success": True,
+                        "data": json.loads(cached),
+                        "cached": True,
+                        "message": "Análise carregada do cache"
+                    }
+            except:
+                pass
+        
         proposicoes_analisadas = []
         
         if incluir_todas:
             dados_proposicoes = analisador.carregar_dados("proposicoes.json")
-            proposicoes_relevantes = dados_proposicoes.get("proposicoes_relevantes", [])
+            proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])
             
-            for prop in proposicoes_relevantes[:2]:
+            if limite_proposicoes:
+                proposicoes_relevantes = proposicoes_relevantes[:limite_proposicoes]
+            
+            print(f"Processando {len(proposicoes_relevantes)} proposições para o deputado {deputado_id}")
+            
+            for i, prop in enumerate(proposicoes_relevantes, 1):
+                print(f"\n[{i}/{len(proposicoes_relevantes)}] Processando proposição: {prop.get('tipo')} {prop.get('numero')} - {prop.get('titulo')}")
+                
                 try:
+                    numero_completo = prop.get("numero", "")
+                    if "/" in numero_completo:
+                        numero_str, ano_str = numero_completo.split("/")
+                        numero = int(numero_str)
+                        ano = int(ano_str)
+                    else:
+                        print(f"ERRO: Formato de número inválido: {numero_completo}")
+                        continue
+                    
+                    print(f"Buscando votos do deputado {deputado_id} para: {prop['tipo']} {numero}/{ano}")
                     resultado = analisador.processar_proposicao_completa(
                         prop["tipo"],
-                        prop["numero"],
-                        prop["ano"],
+                        numero,
+                        ano,
                         prop["titulo"],
-                        prop["relevancia"]
+                        prop.get("relevancia", "média")
                     )
+                    
                     if resultado:
                         proposicoes_analisadas.append(resultado)
-                except:
+                        print(f"SUCESSO: Proposição processada com sucesso: ID {resultado['proposicao']['id']}")
+                    else:
+                        print(f"AVISO: Falha ao processar proposição {prop['tipo']} {numero}/{ano} - dados não encontrados")
+                        
+                except Exception as e:
+                    print(f"ERRO: Erro ao processar proposição {prop.get('tipo', 'N/A')} {prop.get('numero', 'N/A')}: {str(e)}")
                     continue
+            
+            print(f"\nResumo do processamento:")
+            print(f"  - Total de proposições tentadas: {len(proposicoes_relevantes)}")
+            print(f"  - Proposições processadas com sucesso: {len(proposicoes_analisadas)}")
+            print(f"  - Taxa de sucesso: {len(proposicoes_analisadas)/len(proposicoes_relevantes)*100:.1f}%")
         
         if not proposicoes_analisadas:
             return {
                 "success": False,
-                "message": "Nenhuma proposição analisada disponível para este deputado. Use incluir_todas=true para processar."
+                "message": "Nenhuma proposição analisada disponível para este deputado. Verifique se o deputado possui votos registrados nas proposições."
+            }
+        
+        print(f"Analisando perfil do deputado com {len(proposicoes_analisadas)} proposições processadas...")
+        analise = analisador.analisar_deputado(deputado_id, proposicoes_analisadas)
+        
+        resultado_final = {
+            "success": True,
+            "data": analise,
+            "proposicoes_analisadas": len(proposicoes_analisadas),
+            "cached": False,
+            "processamento": {
+                "total_proposicoes_tentadas": len(proposicoes_relevantes) if incluir_todas else 0,
+                "proposicoes_com_sucesso": len(proposicoes_analisadas),
+                "taxa_sucesso": f"{len(proposicoes_analisadas)/len(proposicoes_relevantes)*100:.1f}%" if incluir_todas and proposicoes_relevantes else "N/A"
+            }
+        }
+        
+        if usar_cache and r and analise:
+            try:
+                r.setex(cache_key, CACHE_TTL["deputados"], json.dumps(resultado_final))
+                print(f"Análise salva no cache para deputado {deputado_id}")
+            except:
+                pass
+        
+        return resultado_final
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
+
+@app.get("/deputados/{deputado_id}/analise/completa")
+async def analisar_perfil_deputado_completa(
+    deputado_id: int,
+    forcar_reprocessamento: bool = False,
+    batch_size: int = 5  # Processar em lotes para evitar timeout
+):
+    """
+    Análise completa do deputado processando TODAS as proposições em lotes
+    """
+    try:
+        cache_key = f"analise_total:{deputado_id}"
+        
+        if not forcar_reprocessamento and r:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    return {
+                        "success": True,
+                        "data": json.loads(cached),
+                        "cached": True,
+                        "message": "Análise completa carregada do cache"
+                    }
+            except:
+                pass
+        
+        dados_proposicoes = analisador.carregar_dados("proposicoes.json")
+        proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])
+        
+        print(f"Iniciando análise COMPLETA para deputado {deputado_id}")
+        print(f"Total de proposições a processar: {len(proposicoes_relevantes)}")
+        
+        proposicoes_analisadas = []
+        total_processadas = 0
+        total_com_erro = 0
+        
+        for batch_start in range(0, len(proposicoes_relevantes), batch_size):
+            batch_end = min(batch_start + batch_size, len(proposicoes_relevantes))
+            batch = proposicoes_relevantes[batch_start:batch_end]
+            
+            print(f"\nProcessando lote {batch_start//batch_size + 1}/{(len(proposicoes_relevantes)-1)//batch_size + 1}")
+            print(f"   Proposições {batch_start + 1} a {batch_end} de {len(proposicoes_relevantes)}")
+            
+            for i, prop in enumerate(batch):
+                prop_index = batch_start + i + 1
+                try:
+                    numero_completo = prop.get("numero", "")
+                    if "/" in numero_completo:
+                        numero_str, ano_str = numero_completo.split("/")
+                        numero = int(numero_str)
+                        ano = int(ano_str)
+                    else:
+                        print(f"   ERRO [{prop_index}] Formato inválido: {numero_completo}")
+                        total_com_erro += 1
+                        continue
+                    
+                    print(f"   INFO [{prop_index}] {prop['tipo']} {numero}/{ano}")
+                    resultado = analisador.processar_proposicao_completa(
+                        prop["tipo"], numero, ano, prop["titulo"], prop.get("relevancia", "média")
+                    )
+                    
+                    if resultado:
+                        proposicoes_analisadas.append(resultado)
+                        print(f"   SUCESSO [{prop_index}] Processado")
+                    else:
+                        print(f"   AVISO [{prop_index}] Sem dados")
+                        total_com_erro += 1
+                    
+                    total_processadas += 1
+                    
+                except Exception as e:
+                    print(f"   ERRO [{prop_index}] Erro: {str(e)}")
+                    total_com_erro += 1
+                    total_processadas += 1
+        
+        if not proposicoes_analisadas:
+            return {
+                "success": False,
+                "message": f"Nenhuma proposição processada com sucesso para o deputado {deputado_id}",
+                "estatisticas": {
+                    "total_tentativas": total_processadas,
+                    "sucessos": 0,
+                    "erros": total_com_erro
+                }
             }
         
         analise = analisador.analisar_deputado(deputado_id, proposicoes_analisadas)
         
+        resultado_final = {
+            "deputado_id": deputado_id,
+            "analise": analise,
+            "estatisticas_processamento": {
+                "total_proposicoes_disponiveis": len(proposicoes_relevantes),
+                "total_processadas": total_processadas,
+                "sucessos": len(proposicoes_analisadas),
+                "erros": total_com_erro,
+                "taxa_sucesso": f"{len(proposicoes_analisadas)/total_processadas*100:.1f}%" if total_processadas > 0 else "0%"
+            },
+            "processado_em": datetime.now().isoformat()
+        }
+        
+        if r:
+            try:
+                r.setex(cache_key, 604800, json.dumps(resultado_final))
+            except:
+                pass
+        
         return {
             "success": True,
-            "data": analise,
-            "proposicoes_analisadas": len(proposicoes_analisadas)
+            "data": resultado_final,
+            "cached": False
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro na análise completa: {str(e)}")
 
 @app.get("/estatisticas/geral")
 async def get_estatisticas_gerais():
