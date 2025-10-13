@@ -82,10 +82,13 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
             {deputado.email && (
               <p className="text-gray-500">{deputado.email}</p>
             )}
+            {deputado.id && (
+              <p className="text-gray-500">ID: {deputado.id}</p>
+            )}
           </div>
         </div>
       </div>
-
+            
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h2 className="text-2xl font-bold mb-2">Votações em Proposições Relevantes</h2>
         <p className="text-gray-600 text-sm mb-4">

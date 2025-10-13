@@ -120,27 +120,42 @@ class AnalisadorVotacoes:
             Votação principal ou None se não encontrada
         """
 
-        votacoes_plenario = [v for v in votacoes if v.get('siglaOrgao') == 'PLEN']
-        
+        termos_inicio = ['aprovado', 'aprovada', 'rejeitado', 'rejeitada', 'sim', 'não']
+        for v in votacoes: 
+            if any(v.get('descricao', '').lower() == termo for termo in termos_inicio):
+                print(v,'<<<<<<<<<<')
+
+        votacoes_plenario = [
+            v for v in votacoes 
+            if any(v.get('descricao', '').lower().startswith(termo) for termo in termos_inicio)
+        ] 
+        # votacoes_plenario = [
+        #     v for v in votacoes if v.get('id') == '2270800-160'
+        # ]   
+        # votacoes_plenario = [v for v in votacoes if v.get('siglaOrgao') == 'PLEN']
         if not votacoes_plenario:
             return None
-        
+        else:
+            print(len(votacoes_plenario),'LENGHT votacoes_plenario((((111<<<<<))))')        
+            print(votacoes_plenario,'LENGHT votacoes_plenario((((111<<<<<))))')
+            
+        # votacoes_plenario.sort(key=lambda x: x.get('dataHoraRegistro', ''), reverse=True)
+        # print(votacoes_plenario,'votacoes_plenario((((222<<<<<))))') 
 
-        votacoes_plenario.sort(key=lambda x: x.get('dataHoraRegistro', ''), reverse=True)
-        
 
-        termos_principais = [
-            'texto-base', 'substitutivo global', 'redação final', 
-            'aprovado o projeto', 'projeto aprovado', 'votação final'
-        ]
-        
-        for votacao in votacoes_plenario:
-            desc = votacao.get('descricao', '').lower()
-            if any(termo in desc for termo in termos_principais):
-                return votacao
-        
+        # termos_principais = [
+        #     'aprovado', 'aprovada', 'rejeitado', 'rejeitada'
+        # ]
 
-        return votacoes_plenario[0] if votacoes_plenario else None
+
+        # for votacao in votacoes_plenario:
+        #     print(f"Analisando votação: {votacao.get('descricao', '')}")
+        #     desc = votacao.get('descricao', '').lower()
+        #     if any(termo in desc for termo in termos_principais):
+        #         return votacao
+        
+        # print(f"VOTAÇÕES PLENÁRIO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> {votacoes_plenario[0]}")
+        return votacoes_plenario if votacoes_plenario else None
     
     def buscar_votos_votacao(self, id_votacao: str) -> List[Dict]:
         """
@@ -159,8 +174,8 @@ class AnalisadorVotacoes:
         pagina = 1
         
         while True:
-            params = {'pagina': pagina, 'itens': 100}
-            response = self._fazer_requisicao(f"/votacoes/{id_votacao}/votos", params)
+            # params = {'pagina': pagina, 'itens': 100}
+            response = self._fazer_requisicao(f"/votacoes/{id_votacao}/votos")
             votos = response.get('dados', [])
             
             if not votos:
@@ -223,15 +238,24 @@ class AnalisadorVotacoes:
         if not votacao_principal:
             print("Votação principal não encontrada")
             return None
-        
-        id_votacao = votacao_principal['id']
+
+        # id_votacao = [id for id in votacao_principal]
+        for i in range (len(votacao_principal)):
+            print(f"Index {i}: {votacao_principal[i]}")
+            id_votacao = [votacao_principal[i]['id']]
+
         print(f"Votação principal identificada - ID: {id_votacao}")
         print(f"   Descrição: {votacao_principal.get('descricao', 'N/A')}")
         print(f"   Data: {votacao_principal.get('dataHoraRegistro', 'N/A')}")
         
 
-        votos = self.buscar_votos_votacao(id_votacao)
-        print(f"Coletados {len(votos)} votos individuais")
+        # votos = [id for voto in self.buscar_votos_votacao(id_votacao)]
+        voto_array = []
+        for id in id_votacao:
+            print(f"Buscando votos da votação {id}...")
+            votos = self.buscar_votos_votacao(id)
+            voto_array.append(votos) 
+        print(f"Coletados {len(voto_array)} votos individuais")
         
 
         resultado = {

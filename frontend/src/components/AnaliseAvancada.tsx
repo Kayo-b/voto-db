@@ -51,6 +51,7 @@ const AnaliseAvancada: React.FC<AnaliseAvancadaProps> = ({ deputadoId }) => {
 
       if (result.success) {
         setAnalise(result.data);
+        // console.log(result.dat.deputado, 'DATA');
       } else {
         setError(result.message || 'Erro na análise do deputado');
       }
@@ -150,7 +151,6 @@ const AnaliseAvancada: React.FC<AnaliseAvancadaProps> = ({ deputadoId }) => {
           </p>
         </div>
       )}
-
       {analise && (
         <div className="space-y-6">
 
