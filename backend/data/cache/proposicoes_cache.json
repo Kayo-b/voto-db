@@ -1,0 +1,326 @@
+{
+  "PEC_3_2021": {
+    "id": 2270800,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2270800",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 3,
+    "ano": 2021,
+    "ementa": "Altera os arts. 14, 27, 53, 102 e 105 da Constituição Federal, para dispor sobre as prerrogativas parlamentares e dá outras providências."
+  },
+  "PLP_192_2023": {
+    "id": 2387067,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2387067",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 192,
+    "ano": 2023,
+    "ementa": "Altera a Lei Complementar nº 64, de 18 de maio de 1990.\n  NOVA EMENTA: Altera a Lei Complementar nº 64, de 18 de maio de 1990, e a Lei nº 9.504, de 30 de setembro de 1997 (Lei das Eleições)."
+  },
+  "PEC_241_2016": {
+    "id": 2088351,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2088351",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 241,
+    "ano": 2016,
+    "ementa": "Altera o Ato das Disposições Constitucionais Transitórias, para instituir o Novo Regime Fiscal."
+  },
+  "PL_6787_2016": {
+    "id": 2122076,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2122076",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 6787,
+    "ano": 2016,
+    "ementa": "Altera o Decreto-Lei nº 5.452, de 1º de maio de 1943 - Consolidação das Leis do Trabalho, e a Lei nº 6.019, de 3 de janeiro de 1974, para dispor sobre eleições de representantes dos trabalhadores no local de trabalho e sobre trabalho temporário, e dá outras providências.  NOVA EMENTA: Altera a Consolidação das Leis do Trabalho (CLT), aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943, e as Leis nºs 6.019, de 3 de janeiro de 1974, 8.036, de 11 de maio de 1990, e 8.212, de 24 de julho de 1991, a fim de adequar a legislação às novas relações de trabalho."
+  },
+  "PEC_6_2019": {
+    "id": 2192459,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2192459",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 6,
+    "ano": 2019,
+    "ementa": "Modifica o sistema de previdência social, estabelece regras de transição e disposições transitórias, e dá outras providências."
+  },
+  "PL_490_2007": {
+    "id": 345311,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/345311",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 490,
+    "ano": 2007,
+    "ementa": "Altera a Lei n° 6.001, de 19 de dezembro de 1973, que dispõe sobre o Estatuto do Índio.   NOVA EMENTA: Regulamenta o art. 231 da Constituição Federal, para dispor sobre o reconhecimento, a demarcação, o uso e a gestão de terras indígenas; e altera as Leis nºs 11.460, de 21 de março de 2007, 4.132, de 10 de setembro de 1962, e 6.001, de 19 de dezembro de 1973."
+  },
+  "PEC_45_2019": {
+    "id": 2196833,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2196833",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 45,
+    "ano": 2019,
+    "ementa": "Altera o Sistema Tributário Nacional e dá outras providências.  NOVA EMENTA: Altera o Sistema Tributário Nacional."
+  },
+  "PEC_23_2021": {
+    "id": 2293449,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2293449",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 23,
+    "ano": 2021,
+    "ementa": "Altera os art. 100, art. 109, art. 160, art. 166 e art. 167 da Constituição e acrescenta os art. 80-A e art. 101-A no Ato das Disposições Constitucionais Transitórias, e dá outras providências.  NOVA EMENTA: Altera os arts. 100, 160 e 167 da Constituição Federal e o Ato das Disposições Constitucionais Transitórias para estabelecer o novo regime de pagamentos de precatórios, modificar normas relativas ao Novo Regime Fiscal e autorizar o parcelamento de débitos previdenciários dos Municípios; e dá outras providências."
+  },
+  "PL_2630_2020": {
+    "id": 2256735,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2256735",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2630,
+    "ano": 2020,
+    "ementa": "Institui a Lei Brasileira de Liberdade, Responsabilidade e Transparência na Internet."
+  },
+  "PLP_93_2023": {
+    "id": 2357053,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2357053",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 93,
+    "ano": 2023,
+    "ementa": "Institui regime fiscal sustentável para garantir a estabilidade macroeconômica do País e criar as condições adequadas ao crescimento socioeconômico, nos termos do disposto no art. 6º da Emenda à Constituição nº 126, de 21 de dezembro de 2022.  NOVA EMENTA: Institui regime fiscal sustentável para garantir a estabilidade macroeconômica do País e criar as condições adequadas ao crescimento socioeconômico, com fundamento no art. 6º da Emenda Constitucional nº 126, de 21 de dezembro de 2022, e no inciso VIII do caput e no parágrafo único do art. 163 da Constituição Federal; e altera a Lei Complementar nº 101, de 4 de maio de 2000 (Lei de Responsabilidade Fiscal)."
+  },
+  "PL_1085_2023": {
+    "id": 2351179,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2351179",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 1085,
+    "ano": 2023,
+    "ementa": "Dispõe sobre a igualdade salarial e remuneratória entre mulheres e homens para o exercício de mesma função e altera a Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943."
+  },
+  "PL_2384_2023": {
+    "id": 2360503,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2360503",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2384,
+    "ano": 2023,
+    "ementa": "Disciplina a proclamação de resultados de julgamentos, na hipótese de empate na votação no âmbito do Conselho Administrativo de Recursos Fiscais, e dispõe sobre conformidade tributária no âmbito da Secretaria Especial da Receita Federal do Brasil do Ministério da Fazenda e sobre o contencioso administrativo fiscal de baixa complexidade.  NOVA EMENTA: Disciplina a proclamação de resultados de julgamentos na hipótese de empate na votação no âmbito do Conselho Administrativo de Recursos Fiscais (Carf); dispõe sobre a autorregularização de débitos e a conformidade tributária no âmbito da Secretaria Especial da Receita Federal do Brasil do Ministério da Fazenda, sobre o contencioso administrativo fiscal e sobre a transação na cobrança de créditos da Fazenda Pública; altera o Decreto nº 70.235, de 6 de março de 1972, e as Leis nºs 6.830, de 22 de setembro de 1980 (Lei de Execução Fiscal), 9.430, de 27 de dezembro de 1996, 13.988, de 14 de abril de 2020, 5.764, de 16 de dezembro de 1971, 9.249, de 26 de dezembro de 1995, e 10.150, de 21 de dezembro de 2000; e revoga dispositivo da Lei nº 10.522, de 19 de julho de 2002."
+  },
+  "PL_2685_2022": {
+    "id": 2336393,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2336393",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2685,
+    "ano": 2022,
+    "ementa": "Institui o Programa Nacional de Renegociação das Dívidas das Famílias – ReFamília e estabelece a necessidade de imposição de limite aos juros cobrados na modalidade cartão de crédito rotativo.\n  NOVA EMENTA: Institui o Programa Emergencial de Renegociação de Dívidas de Pessoas Físicas Inadimplentes - Desenrola Brasil; estabelece normas para facilitação de acesso a crédito e mitigação de riscos de inadimplemento e de superendividamento de pessoas físicas; altera a Consolidação das Leis do Trabalho, aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943, e as Leis nºs 10.406, de 10 de janeiro de 2002 (Código Civil), 10.522, de 19 de julho de 2002 e 12.087, de 11 de novembro de 2009; e revoga dispositivo da Lei nº 4.737, de 15 de julho de 1965 (Código Eleitoral), e a Medida Provisória nº 1.176, de 5 de junho de 2023."
+  },
+  "PL_3626_2023": {
+    "id": 2374400,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2374400",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 3626,
+    "ano": 2023,
+    "ementa": "Altera a Medida Provisória nº 2.158-35, de 24 de agosto de 2001, a Lei nº 5.768, de 20 de dezembro de 1971, e a Lei nº 13.756, de 12 de dezembro de 2018.  NOVA EMENTA: Dispõe sobre a modalidade lotérica denominada apostas de quota fixa; altera as Leis nºs 5.768, de 20 de dezembro de 1971, e 13.756, de 12 de dezembro de 2018, e a Medida Provisória nº 2.158-35, de 24 de agosto de 2001; revoga dispositivos do Decreto-Lei nº 204, de 27 de fevereiro de 1967; e dá outras providências"
+  },
+  "PL_4173_2023": {
+    "id": 2383287,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2383287",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 4173,
+    "ano": 2023,
+    "ementa": "Dispõe sobre a tributação da renda auferida por pessoas físicas residentes no País em aplicações financeiras, entidades controladas e trusts no exterior.  NOVA EMENTA: Dispõe sobre a tributação de aplicações em fundos de investimento no País e da renda auferida por pessoas físicas residentes no País em aplicações financeiras, entidades controladas e trusts no exterior; altera as Leis nºs 11.033, de 21 de dezembro de 2004, 8.668, de 25 de junho de 1993, e 10.406, de 10 de janeiro de 2002 (Código Civil); revoga dispositivos das Leis nºs  4.728, de 14 de julho de 1965, 9.250, de 26 de dezembro de 1995, 9.532, de 10 de dezembro de 1997, 10.426, de 24 de abril de 2002, e 10.892, de 13 de julho de 2004, do Decreto-Lei nº 2.287, de 23 de julho de 1986, e das Medidas Provisórias nºs 2.189-49, de 23 de agosto de 2001, e 2.158-35, de 24 de agosto de 2001; e dá outras providências."
+  },
+  "PL_3268_2021": {
+    "id": 2299903,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2299903",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 3268,
+    "ano": 2021,
+    "ementa": "Declara feriado nacional o Dia Nacional de Zumbi e da Consciência Negra."
+  },
+  "PLP_68_2024": {
+    "id": 2430143,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2430143",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 68,
+    "ano": 2024,
+    "ementa": "Institui o Imposto sobre Bens e Serviços - IBS, a Contribuição Social sobre Bens e Serviços - CBS e o Imposto Seletivo - IS e dá outras providências."
+  },
+  "PEC_9_2023": {
+    "id": 2352476,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2352476",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 9,
+    "ano": 2023,
+    "ementa": "Altera a Emenda Constitucional nº 117, de 5 de abril de 2022, quanto à aplicação de sanções aos partidos que não preencheram a cota mínima de recursos ou que não destinaram os valores mínimos em razão de sexo e raça em eleições, bem como nas prestações de contas anuais e eleitorais.  NOVA EMENTA: Impõe aos partidos políticos a obrigatoriedade da aplicação de recursos financeiros para as candidaturas de pessoas pretas e pardas; estabelece parâmetros e condições para regularização e refinanciamento de débitos de partidos políticos; e reforça a imunidade tributária dos partidos políticos conforme previsto na Constituição Federal."
+  },
+  "PLP_177_2023": {
+    "id": 2383019,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2383019",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 177,
+    "ano": 2023,
+    "ementa": "Altera a redação da Lei Complementar nº 78, de 30 de dezembro de 1993."
+  },
+  "PL_2159_2021": {
+    "id": 257161,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/257161",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2159,
+    "ano": 2021,
+    "ementa": "Dispõe sobre o licenciamento ambiental, regulamenta o inciso IV do § 1º do art. 225 da Constituição Federal, e dá outras providências.  NOVA EMENTA: Dispõe sobre o licenciamento ambiental; regulamenta o inciso IV do § 1º do art. 225 da Constituição Federal; altera as Leis nºs 9.605, de 12 de fevereiro de 1998, e 9.985, de 18 de julho de 2000; revoga dispositivo da Lei nº 7.661, de 16 de maio de 1988; e dá outras providências."
+  },
+  "PLP_125_2022": {
+    "id": 2559194,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2559194",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 125,
+    "ano": 2022,
+    "ementa": "Institui o Código de Defesa do Contribuinte."
+  },
+  "PL_5384_2020": {
+    "id": 2266069,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2266069",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 5384,
+    "ano": 2020,
+    "ementa": "Altera a Lei nº 12.711, de 29 de agosto de 2012, para tornar permanente a reserva de vagas nas universidades federais e nas instituições federais de ensino técnico de nível médio.  NOVA EMENTA: Altera a Lei nº 12.711, de 29 de agosto de 2012, para dispor sobre o programa especial para o acesso às instituições federais de educação superior e de ensino técnico de nível médio de estudantes pretos, pardos, indígenas e quilombolas e de pessoas com deficiência, bem como daqueles que tenham cursado integralmente o ensino médio ou fundamental em escola pública."
+  },
+  "PL_914_2024": {
+    "id": 2422697,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2422697",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 914,
+    "ano": 2024,
+    "ementa": "Institui o Programa Mobilidade Verde e Inovação - Programa Mover.  NOVA EMENTA: Institui o Programa Mobilidade Verde e Inovação (Programa Mover); altera o Decreto-Lei nº 1.804, de 3 de setembro de 1980; e revoga dispositivos da Lei nº 13.755, de 10 de dezembro de 2018."
+  },
+  "PL_1904_2024": {
+    "id": 2434493,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2434493",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 1904,
+    "ano": 2024,
+    "ementa": "Acresce dois parágrafos ao art. 124, um parágrafo único ao artigo 125, um segundo parágrafo ao artigo 126 e um parágrafo único ao artigo 128, todos do Código Penal Brasileiro, e dá outras providências."
+  },
+  "PL_2338_2023": {
+    "id": 2487262,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2487262",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2338,
+    "ano": 2023,
+    "ementa": "Dispõe sobre o desenvolvimento, o fomento e o uso ético e responsável da inteligência artificial com base na centralidade da pessoa humana."
+  },
+  "PLP_108_2024": {
+    "id": 2438459,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2438459",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 108,
+    "ano": 2024,
+    "ementa": "Institui o Comitê Gestor do Imposto sobre Bens e Serviços - CG-IBS, dispõe sobre o processo administrativo tributário relativo ao lançamento de ofício do Imposto sobre Bens e Serviços - IBS, sobre a distribuição para os entes federativos do produto da arrecadação do IBS, e sobre o Imposto sobre TransmissãoCausa mortis e Doação de Quaisquer Bens ou Direitos - ITCMD, e dá outras providências."
+  },
+  "PL_2925_2023": {
+    "id": 2367421,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2367421",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 2925,
+    "ano": 2023,
+    "ementa": "Altera a Lei nº 6.385, de 7 de dezembro de 1976, e a Lei nº 6.404, de 15 de dezembro de 1976, para dispor sobre a transparência em processos arbitrais e o sistema de tutela privada de direitos de investidores do mercado de valores mobiliários."
+  },
+  "PL_576_2021": {
+    "id": 2334482,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2334482",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 576,
+    "ano": 2021,
+    "ementa": "Disciplina o aproveitamento de potencial energético offshore."
+  },
+  "PL_4266_2023": {
+    "id": 2410466,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2410466",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 4266,
+    "ano": 2023,
+    "ementa": "Altera o Decreto-Lei nº 2.848, de 7 de dezembro de 1940 (Código Penal), o Decreto-Lei nº 3.688, de 3 de outubro de 1941 (Lei das Contravenções Penais), a Lei nº 7.210, de 11 de julho de 1984 (Lei de Execuc¸a~o Penal), a Lei nº 8.072, de 25 de julho de 1990 (Lei dos Crimes Hediondos), a Lei nº 11.340, de 7 de agosto de 2006 (Lei Maria da Penha) e o Decreto-Lei nº 3.689, de 3 de outubro de 1941 (Código de Processo Penal), para tornar o feminicídio crime autônomo, agravar a sua pena e a de outros crimes praticados contra a mulher por razões da condição do sexo feminino, bem como para estabelecer outras medidas destinadas a prevenir e coibir a violência praticada contra a mulher."
+  },
+  "PLP_175_2024": {
+    "id": 2466104,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2466104",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 175,
+    "ano": 2024,
+    "ementa": "Dispõe sobre a proposição e execução de emendas parlamentares na lei orçamentária anual e dá outras providências."
+  },
+  "PL_1829_2019": {
+    "id": 1672576,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/1672576",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 1829,
+    "ano": 2019,
+    "ementa": "Modifica o artigo 181 da Lei nº 7.565, de 19 de dezembro de 1986.  NOVA EMENTA: Altera as Leis nºs 7.064, de 6 de dezembro de 1982, 7.565, de 19 de dezembro de 1986 (Código Brasileiro de Aeronáutica), 11.771, de 17 de setembro de 2008 (Lei Geral do Turismo), 12.462, de 4 de agosto de 2011, 13.097, de 19 de janeiro de 2015, e 13.146, de 6 de julho de 2015 (Estatuto da Pessoa com Deficiência), para promover a modernização do turismo; dispõe sobre a transferência de empregados da Infraero; revoga o Decreto-Lei nº 1.439, de 30 de dezembro de 1975, e a Lei nº 6.513, de 20 de dezembro de 1977, e dispositivos das Leis nºs 12.833, de 20 de junho de 2013, e 12.974, de 15 de maio de 2014."
+  },
+  "PEC_8_2021": {
+    "id": 2410488,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2410488",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 8,
+    "ano": 2021,
+    "ementa": "Altera a Constituição Federal para dispor sobre a declaração de inconstitucionalidade e a concessão de medidas cautelares nos tribunais."
+  },
+  "PL_3932_2020": {
+    "id": 2258609,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2258609",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 3932,
+    "ano": 2020,
+    "ementa": "Determina o afastamento do trabalho presencial de trabalhadoras gestantes enquanto persistir a vigência do Decreto Legislativo nº 6, de 2020.  NOVA EMENTA: Dispõe sobre o afastamento da empregada gestante das atividades de trabalho presencial durante o estado de calamidade pública reconhecido pelo Decreto Legislativo nº 6, de 20 de março de 2020."
+  },
+  "MPV_1202_2023": {
+    "id": 2416790,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2416790",
+    "siglaTipo": "MPV",
+    "codTipo": 291,
+    "numero": 1202,
+    "ano": 2023,
+    "ementa": "Revoga os benefícios fiscais de que tratam o art. 4º da Lei nº 14.148, de 3 de maio de 2021, e os art. 7º a art. 10 da Lei nº 12.546, de 14 de dezembro de 2011, desonera parcialmente a contribuição previdenciária sobre a folha de pagamento, revoga a alíquota reduzida da contribuição previdenciária aplicável a determinados Municípios e limita a compensação de créditos decorrentes de decisões judiciais transitadas em julgado.  NOVA EMENTA: Altera a Lei nº 9.430, de 27 de dezembro de 1996, para limitar a compensação tributária dos créditos decorrentes de decisões judiciais transitadas em julgado."
+  },
+  "PLP_93_2024": {
+    "id": 2434636,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2434636",
+    "siglaTipo": "PLP",
+    "codTipo": 140,
+    "numero": 93,
+    "ano": 2024,
+    "ementa": "Altera a Lei Complementar nº 199, de 1° de agosto de 2023, para possibilitar o compartilhamento de informação pelas administrações tributárias da União, dos Estados, do Distrito Federal e dos Munícipios com a instituição financeira pública federal, agente operador, nos termos do inciso II do art. 3° da Lei 10.260, de 12 de julho de 2001, de estudantes beneficiados por financiamento estudantil com recursos do Fundo de Financiamento Estudantil (Fies)."
+  },
+  "PEC_66_2023": {
+    "id": 2454495,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2454495",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 66,
+    "ano": 2023,
+    "ementa": "Institui limite para o pagamento de precatórios pelos Municípios, abre novo prazo de parcelamento especial de débitos dos Municípios com seus regimes próprios de previdência social e com o Regime Geral de Previdência Social e dá outras providências."
+  }
+}

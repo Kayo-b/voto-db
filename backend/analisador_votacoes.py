@@ -50,6 +50,44 @@ class AnalisadorVotacoes:
         self.votacoes_file = os.path.join(data_dir, "votacoes.json")
         self.votos_file = os.path.join(data_dir, "votos.json")
         
+        # Cache files for different types of data
+        self.cache_dir = os.path.join(data_dir, "cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.proposicoes_cache = os.path.join(self.cache_dir, "proposicoes_cache.json")
+        self.detalhes_cache = os.path.join(self.cache_dir, "detalhes_cache.json")
+        self.votacoes_cache = os.path.join(self.cache_dir, "votacoes_cache.json")
+        self.votos_cache = os.path.join(self.cache_dir, "votos_cache.json")
+        
+        # Load existing caches
+        self._load_caches()
+        
+    def _load_caches(self):
+        """Load existing cache data"""
+        self.proposicoes_cache_data = self._load_cache_file(self.proposicoes_cache)
+        self.detalhes_cache_data = self._load_cache_file(self.detalhes_cache)
+        self.votacoes_cache_data = self._load_cache_file(self.votacoes_cache)
+        self.votos_cache_data = self._load_cache_file(self.votos_cache)
+        
+    def _load_cache_file(self, filepath: str) -> Dict:
+        """Load cache file or return empty dict"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+    
+    def _save_cache_file(self, filepath: str, data: Dict):
+        """Save cache data to file"""
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Erro ao salvar cache {filepath}: {e}")
+    
+    def _get_cache_key(self, *args) -> str:
+        """Generate cache key from arguments"""
+        return "_".join(str(arg) for arg in args)
+        
     def _delay(self):
         """Aplica delay para respeitar rate limiting"""
         time.sleep(self.DELAY_REQUEST)
@@ -77,23 +115,49 @@ class AnalisadorVotacoes:
         Returns:
             Dados da proposição ou None se não encontrada
         """
+        # Check cache first
+        cache_key = self._get_cache_key(tipo, numero, ano)
+        if cache_key in self.proposicoes_cache_data:
+            print(f"[CACHE] Proposição {tipo} {numero}/{ano} encontrada no cache")
+            return self.proposicoes_cache_data[cache_key]
+        
         params = {
             'siglaTipo': tipo,
             'numero': numero,
             'ano': ano
         }
         
-        print(f"Buscando proposição {tipo} {numero}/{ano}...")
+        print(f"[API] Buscando proposição {tipo} {numero}/{ano}...")
         response = self._fazer_requisicao("/proposicoes", params)
         dados = response.get('dados', [])
         
-        return dados[0] if dados else None
+        result = dados[0] if dados else None
+        
+        # Save to cache
+        if result:
+            self.proposicoes_cache_data[cache_key] = result
+            self._save_cache_file(self.proposicoes_cache, self.proposicoes_cache_data)
+        
+        return result
     
     def buscar_detalhes_proposicao(self, id_proposicao: int) -> Optional[Dict]:
         """Busca detalhes completos de uma proposição"""
-        print(f"Buscando detalhes da proposição {id_proposicao}...")
+        # Check cache first
+        cache_key = str(id_proposicao)
+        if cache_key in self.detalhes_cache_data:
+            print(f"[CACHE] Detalhes da proposição {id_proposicao} encontrados no cache")
+            return self.detalhes_cache_data[cache_key]
+        
+        print(f"[API] Buscando detalhes da proposição {id_proposicao}...")
         response = self._fazer_requisicao(f"/proposicoes/{id_proposicao}")
-        return response.get('dados')
+        result = response.get('dados')
+        
+        # Save to cache
+        if result:
+            self.detalhes_cache_data[cache_key] = result
+            self._save_cache_file(self.detalhes_cache, self.detalhes_cache_data)
+        
+        return result
     
     def buscar_votacoes_proposicao(self, id_proposicao: int) -> List[Dict]:
         """
@@ -105,9 +169,22 @@ class AnalisadorVotacoes:
         Returns:
             Lista de votações da proposição
         """
-        print(f"Buscando votações da proposição {id_proposicao}...")
+        # Check cache first
+        cache_key = str(id_proposicao)
+        if cache_key in self.votacoes_cache_data:
+            print(f"[CACHE] Votações da proposição {id_proposicao} encontradas no cache")
+            return self.votacoes_cache_data[cache_key]
+        
+        print(f"[API] Buscando votações da proposição {id_proposicao}...")
         response = self._fazer_requisicao(f"/proposicoes/{id_proposicao}/votacoes")
-        return response.get('dados', [])
+        result = response.get('dados', [])
+        
+        # Save to cache
+        if result:
+            self.votacoes_cache_data[cache_key] = result
+            self._save_cache_file(self.votacoes_cache, self.votacoes_cache_data)
+        
+        return result
     
     def identificar_votacao_principal(self, votacoes: List[Dict]) -> Optional[Dict]:
         """
@@ -167,7 +244,13 @@ class AnalisadorVotacoes:
         Returns:
             Lista de votos dos deputados
         """
-        print(f"Buscando votos da votação {id_votacao}...")
+        # Check cache first
+        cache_key = str(id_votacao)
+        if cache_key in self.votos_cache_data:
+            print(f"[CACHE] Votos da votação {id_votacao} encontrados no cache")
+            return self.votos_cache_data[cache_key]
+        
+        print(f"[API] Buscando votos da votação {id_votacao}...")
         
 
         todos_votos = []
@@ -192,7 +275,54 @@ class AnalisadorVotacoes:
                 
             pagina += 1
         
+        # Save to cache
+        if todos_votos:
+            self.votos_cache_data[cache_key] = todos_votos
+            self._save_cache_file(self.votos_cache, self.votos_cache_data)
+        
         return todos_votos
+    
+    def clear_cache(self, cache_type: str = "all"):
+        """
+        Clear cache files
+        
+        Args:
+            cache_type: Type of cache to clear ('all', 'proposicoes', 'detalhes', 'votacoes', 'votos')
+        """
+        cache_files = {
+            'proposicoes': (self.proposicoes_cache, 'proposicoes_cache_data'),
+            'detalhes': (self.detalhes_cache, 'detalhes_cache_data'),
+            'votacoes': (self.votacoes_cache, 'votacoes_cache_data'),
+            'votos': (self.votos_cache, 'votos_cache_data')
+        }
+        
+        if cache_type == "all":
+            for cache_name, (file_path, attr_name) in cache_files.items():
+                setattr(self, attr_name, {})
+                self._save_cache_file(file_path, {})
+            print("Todos os caches foram limpos")
+        elif cache_type in cache_files:
+            file_path, attr_name = cache_files[cache_type]
+            setattr(self, attr_name, {})
+            self._save_cache_file(file_path, {})
+            print(f"Cache de {cache_type} foi limpo")
+        else:
+            print(f"Tipo de cache inválido: {cache_type}")
+    
+    def get_cache_stats(self) -> Dict:
+        """Get cache statistics"""
+        return {
+            "proposicoes_cached": len(self.proposicoes_cache_data),
+            "detalhes_cached": len(self.detalhes_cache_data),
+            "votacoes_cached": len(self.votacoes_cache_data),
+            "votos_cached": len(self.votos_cache_data),
+            "total_cached_items": (
+                len(self.proposicoes_cache_data) +
+                len(self.detalhes_cache_data) +
+                len(self.votacoes_cache_data) +
+                len(self.votos_cache_data)
+            )
+        }
     
     def processar_proposicao_completa(self, tipo: str, numero: int, ano: int, 
                                     titulo: str, relevancia: str = "alta") -> Optional[Dict]:
@@ -239,23 +369,31 @@ class AnalisadorVotacoes:
             print("Votação principal não encontrada")
             return None
 
-        # id_votacao = [id for id in votacao_principal]
-        for i in range (len(votacao_principal)):
-            print(f"Index {i}: {votacao_principal[i]}")
-            id_votacao = [votacao_principal[i]['id']]
+        # Get the first voting as the main one
+        primeira_votacao = votacao_principal[0]
+        id_votacao = primeira_votacao['id']
 
         print(f"Votação principal identificada - ID: {id_votacao}")
-        print(f"   Descrição: {votacao_principal.get('descricao', 'N/A')}")
-        print(f"   Data: {votacao_principal.get('dataHoraRegistro', 'N/A')}")
+        print(f"   Descrição: {primeira_votacao.get('descricao', 'N/A')}")
+        print(f"   Data: {primeira_votacao.get('dataHoraRegistro', 'N/A')}")
         
-
-        # votos = [id for voto in self.buscar_votos_votacao(id_votacao)]
-        voto_array = []
-        for id in id_votacao:
-            print(f"Buscando votos da votação {id}...")
-            votos = self.buscar_votos_votacao(id)
-            voto_array.append(votos) 
-        print(f"Coletados {len(voto_array)} votos individuais")
+        # Get votes for the main voting
+        print(f"Buscando votos da votação {id_votacao}...")
+        votos = self.buscar_votos_votacao(id_votacao)
+        
+        # If no votes found, try other votings in the list
+        if not votos and len(votacao_principal) > 1:
+            for i, votacao_alt in enumerate(votacao_principal[1:], 1):
+                print(f"Tentando votação alternativa {i} - ID: {votacao_alt['id']}")
+                votos_alt = self.buscar_votos_votacao(votacao_alt['id'])
+                if votos_alt:
+                    primeira_votacao = votacao_alt
+                    id_votacao = votacao_alt['id']
+                    votos = votos_alt
+                    print(f"✓ Usando votação {id_votacao} com {len(votos)} votos")
+                    break
+        
+        print(f"Coletados {len(votos)} votos individuais")
         
 
         resultado = {
@@ -271,9 +409,9 @@ class AnalisadorVotacoes:
             },
             "votacao_principal": {
                 "id": id_votacao,
-                "descricao": votacao_principal.get('descricao', ''),
-                "data": votacao_principal.get('dataHoraRegistro', ''),
-                "aprovacao": votacao_principal.get('aprovacao', False),
+                "descricao": primeira_votacao.get('descricao', ''),
+                "data": primeira_votacao.get('dataHoraRegistro', ''),
+                "aprovacao": primeira_votacao.get('aprovacao', False),
                 "total_votos": len(votos)
             },
             "votos": votos,

@@ -1,35 +1,30 @@
 {
+
   "votacoes_historicas": [
     {
-      "tipo": "PEC",
-      "numero": "3/2021",
+      "tipo": "PL",
+      "numero": "6787/2016",
       "casa_origem": "Câmara",
-      "titulo": "PEC da Blindagem",
-      "status": "Aprovado destaque",
-      "data_votacao": "2025-09-16",
+      "titulo": "Reforma Trabalhista",
+      "lei": "Lei 13.467/2017",
+      "id_proposicao": "2122076",
+      "id_votacao_principal": "7492",
+      "data_aprovacao": "2017-07-13",
       "relevancia": "alta",
-      "impacto": "Votação secreta para processos contra parlamentares"
-    },
-    {
-      "tipo": "PLP",
-      "numero": "192/2023",
-      "casa_origem": "Senado",
-      "titulo": "Flexibilização da Lei de Ficha Limpa",
-      "status": "Aprovado Senado",
-      "data_votacao": "2025-09-03",
-      "relevancia": "alta",
-      "impacto": "Reduz prazo de inelegibilidade"
+      "impacto": "Alterou 117 pontos da CLT"
     }
   ],
   "metadata": {
-    "total_proposicoes": 23,
-    "periodo": "2015-2025",
+    "total_proposicoes": 45,
+    "periodo": "2015-2024",
+    "proposicoes_2023_2024": 22,
     "fontes": [
       "API Câmara dos Deputados",
       "API Senado Federal",
       "Ranking dos Políticos",
       "Voz Ativa"
     ],
-    "ultima_atualizacao": "2025-01-01"
+    "ultima_atualizacao": "2025-01-01",
+    "observacao": "IDs de proposição incluídos quando disponíveis para facilitar busca via API"
   }
 }

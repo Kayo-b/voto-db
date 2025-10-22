@@ -421,7 +421,7 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True,
                         prop["titulo"],
                         prop.get("relevancia", "média")
                     )
-                    
+                    print(f"")
                     if resultado:
                         proposicoes_analisadas.append(resultado)
                         print(f"SUCESSO: Proposição processada com sucesso: ID {resultado['proposicao']['id']}")
@@ -584,6 +584,32 @@ async def analisar_perfil_deputado_completa(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na análise completa: {str(e)}")
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics"""
+    try:
+        cache_stats = analisador.get_cache_stats()
+        return {
+            "success": True,
+            "data": cache_stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter estatísticas do cache: {str(e)}")
+
+@app.post("/cache/clear")
+async def clear_cache(cache_type: str = "all"):
+    """Clear cache files"""
+    try:
+        analisador.clear_cache(cache_type)
+        new_stats = analisador.get_cache_stats()
+        return {
+            "success": True,
+            "message": f"Cache '{cache_type}' limpo com sucesso",
+            "data": new_stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao limpar cache: {str(e)}")
 
 @app.get("/estatisticas/geral")
 async def get_estatisticas_gerais():
