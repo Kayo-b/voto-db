@@ -198,40 +198,14 @@ class AnalisadorVotacoes:
         """
 
         termos_inicio = ['aprovado', 'aprovada', 'rejeitado', 'rejeitada', 'sim', 'não']
-        for v in votacoes: 
-            if any(v.get('descricao', '').lower() == termo for termo in termos_inicio):
-                print(v,'<<<<<<<<<<')
-
         votacoes_plenario = [
             v for v in votacoes 
             if any(v.get('descricao', '').lower().startswith(termo) for termo in termos_inicio)
         ] 
-        # votacoes_plenario = [
-        #     v for v in votacoes if v.get('id') == '2270800-160'
-        # ]   
-        # votacoes_plenario = [v for v in votacoes if v.get('siglaOrgao') == 'PLEN']
+        
         if not votacoes_plenario:
             return None
-        else:
-            print(len(votacoes_plenario),'LENGHT votacoes_plenario((((111<<<<<))))')        
-            print(votacoes_plenario,'LENGHT votacoes_plenario((((111<<<<<))))')
             
-        # votacoes_plenario.sort(key=lambda x: x.get('dataHoraRegistro', ''), reverse=True)
-        # print(votacoes_plenario,'votacoes_plenario((((222<<<<<))))') 
-
-
-        # termos_principais = [
-        #     'aprovado', 'aprovada', 'rejeitado', 'rejeitada'
-        # ]
-
-
-        # for votacao in votacoes_plenario:
-        #     print(f"Analisando votação: {votacao.get('descricao', '')}")
-        #     desc = votacao.get('descricao', '').lower()
-        #     if any(termo in desc for termo in termos_principais):
-        #         return votacao
-        
-        # print(f"VOTAÇÕES PLENÁRIO>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> {votacoes_plenario[0]}")
         return votacoes_plenario if votacoes_plenario else None
     
     def buscar_votos_votacao(self, id_votacao: str) -> List[Dict]:
@@ -252,12 +226,10 @@ class AnalisadorVotacoes:
         
         print(f"[API] Buscando votos da votação {id_votacao}...")
         
-
         todos_votos = []
         pagina = 1
         
         while True:
-            # params = {'pagina': pagina, 'itens': 100}
             response = self._fazer_requisicao(f"/votacoes/{id_votacao}/votos")
             votos = response.get('dados', [])
             
@@ -390,7 +362,7 @@ class AnalisadorVotacoes:
                     primeira_votacao = votacao_alt
                     id_votacao = votacao_alt['id']
                     votos = votos_alt
-                    print(f"✓ Usando votação {id_votacao} com {len(votos)} votos")
+                    print(f"Usando votação {id_votacao} com {len(votos)} votos")
                     break
         
         print(f"Coletados {len(votos)} votos individuais")
@@ -459,10 +431,8 @@ class AnalisadorVotacoes:
     def carregar_dados(self, arquivo: str) -> Dict:
         """Carrega dados de arquivo JSON"""
         filepath = os.path.join(self.data_dir, arquivo)
-        print("Carregando dados de: filepath",filepath)
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
-                print("Dados carregados com sucesso.",f)
                 return json.load(f)
         except FileNotFoundError:
             return {'ARQUIVO_NAO_ENCONTRADO': True}

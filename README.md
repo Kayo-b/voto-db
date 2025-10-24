@@ -2,9 +2,9 @@
 
 Sistema completo para análise de votações da Câmara dos Deputados, com foco em proposições de alta relevância social e política.
 
-## 🎯 Funcionalidades
+## Funcionalidades
 
-### ✅ Implementadas
+### Implementadas
 
 #### Backend (FastAPI + Redis)
 - **API de Deputados**: Busca e detalhes de deputados
@@ -19,14 +19,14 @@ Sistema completo para análise de votações da Câmara dos Deputados, com foco 
 - **Análise Avançada**: Análise do perfil de votação de deputados específicos
 - **Interface Responsiva**: Design moderno e responsivo
 
-### 🔧 Tecnologias
+### Tecnologias
 
 - **Backend**: FastAPI, Redis, Python
 - **Frontend**: React, TypeScript, CSS personalizado
 - **API Externa**: API da Câmara dos Deputados
 - **Deploy**: Railway (configurado)
 
-## 🚀 Como Usar
+## Como Usar
 
 ### Pré-requisitos
 - Python 3.13+
@@ -39,7 +39,7 @@ Sistema completo para análise de votações da Câmara dos Deputados, com foco 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
+source venv/bin/activate
 pip install fastapi uvicorn redis requests python-dotenv
 ```
 
@@ -68,7 +68,7 @@ npm start
 - **Backend API**: http://localhost:8001
 - **Documentação API**: http://localhost:8001/docs
 
-## 📊 Endpoints da API
+## Endpoints da API
 
 ### Endpoints Básicos
 - `GET /deputados` - Lista deputados
@@ -83,7 +83,7 @@ npm start
 - `GET /estatisticas/geral` - Estatísticas do sistema
 - `GET /health` - Status do sistema
 
-## 🎯 Casos de Uso
+## Casos de Uso
 
 ### 1. Analisar Deputado Específico
 1. Acesse "Buscar Deputados"
@@ -104,7 +104,7 @@ npm start
 3. Escolha "Análise Rápida" ou "Análise Completa"
 4. Compare perfis de votação
 
-## 📋 Proposições Pré-selecionadas
+## Proposições Pré-selecionadas
 
 O sistema inclui análise de 23 proposições de alta relevância:
 
@@ -120,7 +120,7 @@ O sistema inclui análise de 23 proposições de alta relevância:
 - **PL 1179/2020**: Marco Legal das Startups
 - **PL 5829/2019**: Lei de Cotas - Renovação
 
-## 🔍 Sistema de Análise
+## Sistema de Análise
 
 ### Identificação de Votações Principais
 O sistema identifica automaticamente as votações mais importantes usando:
@@ -134,7 +134,7 @@ O sistema identifica automaticamente as votações mais importantes usando:
 - **Estatísticas por Partido**: Distribuição de votos por partido
 - **Relevância**: Classificação do impacto da proposição
 
-## 🛠️ Desenvolvimento
+## Desenvolvimento
 
 ### Scripts Úteis
 
@@ -155,7 +155,7 @@ python test_sistema.py
 curl http://localhost:8001/health
 ```
 
-## 🚀 Deploy
+## Deploy
 
 ### Railway
 O projeto está configurado para deploy no Railway:
@@ -170,7 +170,7 @@ O projeto está configurado para deploy no Railway:
 npm install -g @railway/cli
 railway login
 railway init
-railway add  # Adicionar Redis
+railway add
 railway up
 ```
 
@@ -183,4 +183,4 @@ railway up
 ---
 
 **VotoDB v2.0** - Sistema Completo de Análise de Votações
-Desenvolvido para transparência e análise política no Brasil 🇧🇷
+Desenvolvido para transparência e análise política no Brasil

@@ -1,0 +1,329 @@
+{
+  "titulo": "Sistema de Identificação de Votações Determinantes",
+  "versao": "1.0",
+  "objetivo": "Identificar automaticamente a votação mais importante e determinante de uma proposição legislativa",
+  
+  "regras_priorizacao": {
+    "nivel_1_eliminacao_preliminar": {
+      "descricao": "Eliminar votações claramente não-determinantes",
+      "criterios_exclusao": [
+        {
+          "regra": "EXCLUIR votações em comissões (siglaOrgao != 'PLEN')",
+          "excecao": "Manter se for única votação disponível",
+          "exemplos_excluir": ["CTRAB", "CCJC", "CFT", "CESP", "PL678716"]
+        },
+        {
+          "regra": "EXCLUIR requerimentos procedimentais",
+          "palavras_chave": ["REQ", "Requerimento", "audiência", "convite", "diligência"],
+          "exemplos": "REQ 212/2017, pedido de vista, convocação"
+        },
+        {
+          "regra": "EXCLUIR votações de tramitação",
+          "palavras_chave": ["Aprovado o Parecer", "aprovada a dispensa", "deferido", "indeferido"],
+          "descricao": "Decisões sobre como o projeto tramita, não sobre seu conteúdo"
+        }
+      ]
+    },
+
+    "nivel_2_identificacao_tipo": {
+      "descricao": "Classificar votações restantes por tipo",
+      "tipos": {
+        "texto_base": {
+          "peso": 100,
+          "palavras_chave": [
+            "Substitutivo Global",
+            "texto-base",
+            "Parecer do Relator",
+            "Subemenda Substitutiva Global",
+            "projeto na íntegra",
+            "aprovado o projeto"
+          ],
+          "caracteristicas": [
+            "Contém contagem de votos (Sim: X; não: Y)",
+            "siglaOrgao = 'PLEN'",
+            "Primeira grande votação substantiva"
+          ]
+        },
+        "redacao_final": {
+          "peso": 50,
+          "palavras_chave": [
+            "Redação Final",
+            "texto final",
+            "consolidação"
+          ],
+          "caracteristicas": [
+            "Geralmente simbólica (sem contagem de votos)",
+            "Ocorre APÓS votação do texto-base",
+            "Formaliza decisão já tomada"
+          ],
+          "observacao": "Raramente é a mais importante, exceto se for única votação nominal"
+        },
+        "emendas_destaques": {
+          "peso": 30,
+          "palavras_chave": [
+            "Emenda",
+            "Destaque",
+            "Mantido o texto",
+            "Rejeitada a Emenda",
+            "Aprovada a Emenda"
+          ],
+          "caracteristicas": [
+            "Modificam partes específicas",
+            "Ocorrem APÓS texto-base",
+            "Múltiplas votações pequenas"
+          ]
+        },
+        "regime_urgencia": {
+          "peso": 20,
+          "palavras_chave": [
+            "Regime de Urgência",
+            "urgência",
+            "tramitação"
+          ],
+          "caracteristicas": [
+            "Decisão procedimental importante",
+            "Não altera conteúdo do projeto"
+          ]
+        }
+      }
+    },
+
+    "nivel_3_criterios_desempate": {
+      "descricao": "Quando múltiplas votações do mesmo tipo, aplicar critérios de desempate",
+      "ordem_prioridade": [
+        {
+          "criterio": "votacao_nominal_vs_simbolica",
+          "regra": "SEMPRE priorizar votação nominal (com contagem de votos) sobre simbólica",
+          "como_identificar": "Possui 'Sim:', 'não:', 'abstenção:', 'total:' na descrição"
+        },
+        {
+          "criterio": "maior_numero_votantes",
+          "regra": "Entre votações nominais, priorizar a com maior número total de votos",
+          "formula": "extrair número após 'total:' e comparar"
+        },
+        {
+          "criterio": "votacao_mais_disputada",
+          "regra": "Em empate técnico, priorizar votação com resultado mais apertado",
+          "formula": "calcular |votos_sim - votos_nao| / total, menor valor = mais disputada"
+        },
+        {
+          "criterio": "cronologia",
+          "regra": "Para votações de texto-base, a PRIMEIRA é geralmente a determinante",
+          "observacao": "Votações posteriores são geralmente destaques/emendas"
+        }
+      ]
+    },
+
+    "nivel_4_validacao_final": {
+      "descricao": "Verificações finais antes de retornar resultado",
+      "checklist": [
+        {
+          "validacao": "votacao_em_plenario",
+          "regra": "siglaOrgao deve ser 'PLEN'",
+          "acao_se_falhar": "Se não houver PLEN, usar votação de comissão com maior peso"
+        },
+        {
+          "validacao": "aprovacao_positiva",
+          "regra": "aprovacao deve ser 1 (aprovada)",
+          "acao_se_falhar": "Se todas falharam, retornar a última votação rejeitada"
+        },
+        {
+          "validacao": "tem_contagem_votos",
+          "regra": "Idealmente deve ter contagem de votos para análise posterior",
+          "acao_se_falhar": "Aceitar simbólica apenas se for única opção de texto-base"
+        },
+        {
+          "validacao": "data_coerente",
+          "regra": "Data deve estar dentro do período de tramitação conhecido",
+          "acao_se_falhar": "Verificar se há erro nos dados da API"
+        }
+      ]
+    }
+  },
+
+  "algoritmo_passo_a_passo": {
+    "passo_1": {
+      "acao": "Carregar todas votações da proposição via API",
+      "endpoint_exemplo": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/{id}/votacoes"
+    },
+    "passo_2": {
+      "acao": "Filtrar votações aplicando NÍVEL 1 (eliminação preliminar)",
+      "resultado_esperado": "Lista reduzida sem votações procedimentais"
+    },
+    "passo_3": {
+      "acao": "Classificar votações restantes por tipo (NÍVEL 2)",
+      "metodo": "Análise de palavras-chave na descrição",
+      "resultado_esperado": "Cada votação recebe um peso/tipo"
+    },
+    "passo_4": {
+      "acao": "Ordenar votações por peso decrescente",
+      "ordem": "texto_base (100) > redacao_final (50) > emendas (30) > urgencia (20)"
+    },
+    "passo_5": {
+      "acao": "Se múltiplas votações com peso máximo, aplicar NÍVEL 3 (desempate)",
+      "criterios_sequenciais": [
+        "Priorizar nominal sobre simbólica",
+        "Priorizar maior número de votantes",
+        "Priorizar mais disputada",
+        "Priorizar primeira cronologicamente"
+      ]
+    },
+    "passo_6": {
+      "acao": "Aplicar NÍVEL 4 (validação final)",
+      "resultado_esperado": "Confirmação de que votação selecionada é válida"
+    },
+    "passo_7": {
+      "acao": "Retornar resultado estruturado",
+      "formato": "Ver seção 'formato_saida'"
+    }
+  },
+
+  "casos_especiais": {
+    "pec_dois_turnos": {
+      "descricao": "PECs requerem 2 turnos em cada casa",
+      "regra": "Considerar votação do 2º turno como determinante, ou 1º turno se mais disputado",
+      "identificacao": "Descrição contém '1º turno' ou '2º turno' ou 'primeiro turno'"
+    },
+    "texto_voltou_casa_origem": {
+      "descricao": "Quando Senado altera e devolve à Câmara (ou vice-versa)",
+      "regra": "Priorizar votação da casa revisora, depois última votação da casa de origem",
+      "identificacao": "Múltiplas aprovações do mesmo texto em datas muito distantes"
+    },
+    "veto_derrubado": {
+      "descricao": "Votação de derrubada de veto presidencial",
+      "regra": "Tratar como votação determinante separada, não sobrescrever votação original",
+      "palavras_chave": ["veto", "VET", "derrubada", "manutenção do veto"],
+      "retorno": "Incluir campo extra 'votacao_veto' no resultado"
+    },
+    "apenas_votacoes_simbolicas": {
+      "descricao": "Projeto aprovado apenas por votações simbólicas",
+      "regra": "Retornar votação de redação final ou texto-base, mesmo sem contagem",
+      "observacao": "Marcar com flag 'votacao_simbolica': true"
+    },
+    "urgencia_seguida_de_votacao": {
+      "descricao": "Regime de urgência seguido de votação no mesmo dia",
+      "regra": "Ignorar urgência, priorizar votação substantiva",
+      "identificacao": "Mesmo 'data' e proximidade em 'dataHoraRegistro'"
+    }
+  },
+
+  "formato_saida": {
+    "estrutura": {
+      "votacao_determinante": {
+        "id": "string - ID da votação",
+        "uri": "string - URI completa da API",
+        "tipo": "string - texto_base|redacao_final|emenda|urgencia|veto",
+        "data": "string - Data da votação",
+        "dataHoraRegistro": "string - Timestamp completo",
+        "orgao": "string - PLEN preferencial",
+        "descricao": "string - Descrição original da API",
+        "nominal": "boolean - true se tem contagem de votos",
+        "votos": {
+          "sim": "integer|null",
+          "nao": "integer|null",
+          "abstencao": "integer|null",
+          "total": "integer|null"
+        },
+        "aprovacao": "integer - 1=aprovado, 0=rejeitado",
+        "confianca": "integer - 0-100, baseado em quantos critérios atendeu"
+      },
+      "votacoes_secundarias": [
+        {
+          "descricao": "Array com outras votações importantes (emendas relevantes, 2º turno, etc)",
+          "estrutura": "Mesma da votacao_determinante"
+        }
+      ],
+      "metadados": {
+        "total_votacoes_analisadas": "integer",
+        "votacoes_eliminadas": "integer",
+        "criterio_selecao": "string - Explicação de por que esta foi escolhida",
+        "observacoes": "string - Avisos ou informações adicionais"
+      }
+    }
+  },
+
+  "exemplos_praticos": {
+    "exemplo_1_reforma_trabalhista": {
+      "entrada": "PL 6787/2016 - 115 votações",
+      "processo": [
+        "Eliminar 98 votações em comissões/requerimentos",
+        "Restam 17 votações em PLEN",
+        "Identificar 1 texto-base (id 348), 1 redação final (411), 15 emendas",
+        "Texto-base é nominal (296x177), redação final é simbólica",
+        "Selecionar id 348 como determinante"
+      ],
+      "resultado": {
+        "id": "2122076-348",
+        "tipo": "texto_base",
+        "nominal": true,
+        "votos": {"sim": 296, "nao": 177, "total": 473},
+        "confianca": 95
+      }
+    },
+    "exemplo_2_pec_dois_turnos": {
+      "entrada": "PEC com votações em 1º e 2º turno",
+      "processo": [
+        "Identificar votação '2º turno' com 308x150",
+        "Identificar votação '1º turno' com 320x140",
+        "Priorizar 2º turno (é o definitivo)",
+        "Incluir 1º turno em votacoes_secundarias"
+      ],
+      "resultado": {
+        "votacao_determinante": "2º turno",
+        "votacoes_secundarias": ["1º turno"],
+        "confianca": 100
+      }
+    },
+    "exemplo_3_apenas_simbolica": {
+      "entrada": "PL aprovado apenas por aclamação",
+      "processo": [
+        "Nenhuma votação nominal encontrada",
+        "Selecionar redação final simbólica",
+        "Marcar flag votacao_simbolica: true",
+        "Reduzir confiança para 60"
+      ],
+      "resultado": {
+        "nominal": false,
+        "votos": null,
+        "confianca": 60,
+        "observacoes": "Aprovação simbólica - votos individuais não disponíveis"
+      }
+    }
+  },
+
+  "tratamento_erros": {
+    "nenhuma_votacao_encontrada": {
+      "retorno": "null",
+      "mensagem": "Proposição sem votações registradas na API"
+    },
+    "todas_votacoes_rejeitadas": {
+      "retorno": "Última votação rejeitada",
+      "mensagem": "Projeto não foi aprovado - retornando votação final negativa"
+    },
+    "dados_inconsistentes": {
+      "retorno": "Votação com maior confiança disponível",
+      "mensagem": "Dados parciais ou inconsistentes - resultado com baixa confiança",
+      "confianca": 40
+    },
+    "multiplas_votacoes_texto_base": {
+      "acao": "Aplicar critérios de desempate do NÍVEL 3",
+      "se_empate_persistir": "Retornar todas em 'votacoes_secundarias' com aviso"
+    }
+  },
+
+  "metricas_qualidade": {
+    "confianca_alta": "90-100: Votação nominal de texto-base em plenário",
+    "confianca_media": "60-89: Votação simbólica ou emenda importante",
+    "confianca_baixa": "0-59: Dados incompletos ou votação em comissão",
+    "formula_confianca": "base_peso_tipo + (15 se nominal) + (10 se PLEN) + (5 se >300 votantes) - (20 se dados faltando)"
+  },
+
+  "Referencias_legais": {
+    "nota": "Regras baseadas no Regimento Interno da Câmara dos Deputados e Senado Federal",
+    "fontes": [
+      "Regimento Interno da Câmara - Arts. 180-187 (votações)",
+      "Regimento Interno do Senado - Arts. 288-298",
+      "API Dados Abertos - Documentação oficial"
+    ]
+  }
+}

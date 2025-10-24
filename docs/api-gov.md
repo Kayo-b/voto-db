@@ -4,7 +4,6 @@
 
 Chegando aos dados sobre votos de parlamentres em uma proposicao(PL,PEC etc)
 
-
 ### Caminho: Proposicao -> Parlamentar
 
 0. Numero da proposicao deve ser manualmente localizado
@@ -24,7 +23,7 @@ Chegando aos dados sobre votos de parlamentres em uma proposicao(PL,PEC etc)
 ### Caminhos alternativos 
 
 0. listar proposicoes relevantes manualmente 
- 0.1 - > pelo numero/ano buscar em: /proposicoes?ordem=DESC&ordenarPor=id&siglaTipo=REQ&numero=2307&ano=2007 
+ 0.1 -> pelo numero/ano buscar em: /proposicoes?ordem=DESC&ordenarPor=id&siglaTipo=REQ&numero=2307&ano=2007 
   -> lista de proposicoes localizada em backend/data/proposicoes.json
  0.2 -> descobrir o id da proposicao
  0.3 -> com o id da proposicao buscar o id da votacao: proposicoes/2566856/votacoes
