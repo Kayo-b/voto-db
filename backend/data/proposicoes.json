@@ -1,5 +1,4 @@
 {
-
   "votacoes_historicas": [
     {
       "tipo": "PL",
@@ -12,19 +11,180 @@
       "data_aprovacao": "2017-07-13",
       "relevancia": "alta",
       "impacto": "Alterou 117 pontos da CLT"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "68/2024",
+      "casa_origem": "Executivo",
+      "titulo": "Regulamentação da Reforma Tributária (IBS, CBS e Imposto Seletivo)",
+      "lei": "Lei Complementar 214/2025",
+      "id_proposicao": "2430143",
+      "data_aprovacao_camara_1turno": "2024-07-10",
+      "votos_camara": "336 favoráveis, 142 contrários",
+      "data_aprovacao_senado": "2024-12-12",
+      "votos_senado": "49 favoráveis, 19 contrários",
+      "data_aprovacao_final_camara": "2024-12-17",
+      "votos_camara_final": "324 favoráveis, 123 contrários",
+      "relevancia": "alta",
+      "impacto": "Institui IBS, CBS e Imposto Seletivo, unificando 5 tributos (PIS, Cofins, ICMS, ISS, IPI)"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "8/2021",
+      "casa_origem": "Senado",
+      "titulo": "Limites às Decisões Monocráticas no STF",
+      "status": "Aguardando votação final na Câmara",
+      "data_aprovacao_senado": "2023-11-22",
+      "votos_senado_1turno": "52 favoráveis, 18 contrários",
+      "votos_senado_2turno": "52 favoráveis, 18 contrários",
+      "data_admissibilidade_ccj_camara": "2024-10-09",
+      "relevancia": "alta",
+      "impacto": "Restringe decisões monocráticas e estabelece prazos para julgamentos colegiados"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "93/2023",
+      "casa_origem": "Executivo",
+      "titulo": "Novo Arcabouço Fiscal",
+      "lei": "Lei Complementar 200/2023",
+      "data_aprovacao_camara": "2023-08-22",
+      "votos_camara": "372 favoráveis, 108 contrários",
+      "data_sancao": "2023-08-30",
+      "data_publicacao": "2023-08-31",
+      "relevancia": "alta",
+      "impacto": "Substitui teto de gastos, limita crescimento da despesa a 70% da variação da receita"
+    },
+    {
+      "tipo": "PL",
+      "numero": "2903/2023",
+      "casa_origem": "Câmara (PL 490/2007)",
+      "titulo": "Marco Temporal para Terras Indígenas",
+      "lei": "Lei 14.701/2023",
+      "data_aprovacao_camara": "2023-05-30",
+      "votos_camara": "283 favoráveis, 155 contrários",
+      "data_aprovacao_senado": "2023-09-27",
+      "votos_senado": "43 favoráveis, 21 contrários",
+      "data_derrubada_veto": "2023-12-14",
+      "votos_derrubada_veto_senado": "53 pela rejeição, 19 pela manutenção",
+      "votos_derrubada_veto_camara": "321 pela derrubada, 137 pela manutenção",
+      "data_promulgacao_final": "2023-12-27",
+      "relevancia": "alta",
+      "impacto": "Define marco temporal de 05/10/1988 para demarcação de terras indígenas"
+    },
+    {
+      "tipo": "PL",
+      "numero": "334/2023",
+      "casa_origem": "Senado",
+      "titulo": "Prorrogação da Desoneração da Folha de Pagamentos",
+      "lei": "Lei 14.784/2023",
+      "data_aprovacao_senado": "2023-07",
+      "data_derrubada_veto": "2023-12",
+      "data_promulgacao": "2023-12-27",
+      "data_publicacao": "2023-12-28",
+      "relevancia": "alta",
+      "impacto": "Prorroga desoneração para 17 setores até 31/12/2027"
+    },
+    {
+      "tipo": "PL",
+      "numero": "1847/2024",
+      "casa_origem": "Senado",
+      "titulo": "Reoneração Gradual da Folha de Pagamentos",
+      "lei": "Lei 14.973/2024",
+      "data_aprovacao_senado": "2024-08-20",
+      "data_aprovacao_camara": "2024-09-12",
+      "relevancia": "alta",
+      "impacto": "Estabelece reoneração gradual 2025-2027: 5% (2025), 10% (2026), 20% (2027)"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "54/2024",
+      "casa_origem": "Executivo",
+      "titulo": "PEC do Pacote de Corte de Gastos",
+      "emenda_constitucional": "EC 135/2024",
+      "data_aprovacao_camara": "2024-12-18",
+      "data_aprovacao_senado_1turno": "2024-12-19",
+      "data_aprovacao_senado_2turno": "2024-12-19",
+      "data_promulgacao": "2024-12-20",
+      "relevancia": "alta",
+      "impacto": "Restringe abono salarial, enquadra verbas indenizatórias no teto do funcionalismo"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "210/2024",
+      "casa_origem": "Executivo",
+      "titulo": "Limites de Gastos em Caso de Déficit (Pacote Corte de Gastos)",
+      "lei": "Lei Complementar 211/2024",
+      "data_aprovacao_senado": "2024-12-19",
+      "data_sancao": "2024-12-31",
+      "relevancia": "alta",
+      "impacto": "Impede aumento de benefícios fiscais em déficit, permite contingenciamento de emendas"
+    },
+    {
+      "tipo": "PL",
+      "numero": "4614/2024",
+      "casa_origem": "Câmara",
+      "titulo": "Restrições ao BPC e Salário Mínimo (Pacote Corte de Gastos)",
+      "status": "Aguardando sanção",
+      "data_aprovacao_senado": "2024-12-20",
+      "relevancia": "alta",
+      "impacto": "Restringe acesso ao BPC e limita aumento real do salário mínimo a 2,5% ao ano"
+    },
+    {
+      "tipo": "PLP",
+      "numero": "108/2024",
+      "casa_origem": "Executivo",
+      "titulo": "Comitê Gestor do IBS (Reforma Tributária)",
+      "status": "Em tramitação na Câmara",
+      "relevancia": "alta",
+      "impacto": "Institui comitê gestor dos recursos do IBS com regimes diferenciados"
+    },
+    {
+      "tipo": "MP",
+      "numero": "1202/2023",
+      "casa_origem": "Executivo",
+      "titulo": "Reoneração da Folha de Pagamentos (primeira tentativa)",
+      "status": "Revogada pela MP 1208/2024",
+      "data_edicao": "2023-12",
+      "relevancia": "média",
+      "impacto": "Tentou limitar desoneração a um salário mínimo por trabalhador"
+    },
+    {
+      "tipo": "MP",
+      "numero": "1208/2024",
+      "casa_origem": "Executivo",
+      "titulo": "Manutenção Temporária da Desoneração",
+      "data_edicao": "2024",
+      "relevancia": "média",
+      "impacto": "Revoga MP 1202/23 e mantém desoneração em 2024 durante negociações"
     }
   ],
   "metadata": {
-    "total_proposicoes": 45,
-    "periodo": "2015-2024",
-    "proposicoes_2023_2024": 22,
+    "total_proposicoes": 58,
+    "periodo": "2023-2024",
+    "proposicoes_2023": 23,
+    "proposicoes_2024": 35,
     "fontes": [
       "API Câmara dos Deputados",
       "API Senado Federal",
-      "Ranking dos Políticos",
-      "Voz Ativa"
+      "Agência Senado",
+      "Agência Câmara",
+      "Agência Brasil",
+      "CNN Brasil",
+      "Conjur",
+      "Sites oficiais do governo"
     ],
-    "ultima_atualizacao": "2025-01-01",
-    "observacao": "IDs de proposição incluídos quando disponíveis para facilitar busca via API"
+    "ultima_atualizacao": "2025-01-15",
+    "observacoes": [
+      "IDs de proposição incluídos quando disponíveis na API Câmara/Senado",
+      "IDs de votação específicos nem sempre são públicos em formato estruturado",
+      "Algumas votações ocorrem em Plenário sem ID único publicado",
+      "Votações em comissões têm numeração própria diferente do Plenário",
+      "PECs não possuem votação única, mas dois turnos em cada Casa"
+    ],
+    "notas_tecnicas": {
+      "ids_votacao": "Os IDs de votação determinante e final são geralmente acessíveis via API mas requerem conhecimento da data exata e sessão",
+      "plp_vs_pl": "PLPs requerem maioria absoluta (257 dep. e 41 sen.), PLs requerem maioria simples",
+      "pec_tramitacao": "PECs requerem 3/5 dos votos (308 dep. e 49 sen.) em dois turnos em cada Casa"
+    }
   }
 }
