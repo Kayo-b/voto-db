@@ -8,6 +8,10 @@ h11==0.16.0
 idna==3.10
 pydantic==2.11.10
 pydantic_core==2.33.2
+# Database dependencies
+sqlalchemy==2.0.34
+psycopg2-binary==2.9.9
+alembic==1.13.3
 python-dotenv==1.1.1
 redis==6.4.0
 requests==2.32.5

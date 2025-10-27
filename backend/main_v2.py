@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 import requests
@@ -10,6 +10,14 @@ from pydantic import BaseModel
 from analisador_votacoes import AnalisadorVotacoes
 import asyncio
 from datetime import datetime
+import sys
+
+# Add database imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
+from database.import_service import import_deputados_from_json
+from database.voting_import_service import import_voting_history_from_json
+from database.connection import get_database
+from sqlalchemy.orm import Session
 
 load_dotenv()
 
@@ -72,10 +80,26 @@ async def fetch_with_cache(endpoint, cache_key, ttl):
     return None
 
 @app.get("/deputados")
-async def get_deputados(nome: str = None):
+async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
+    """
+    Get deputados and automatically import them to database
+    """
     endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
     cache_key = f"deputados:{nome or 'all'}"
-    return await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
+    
+    # Fetch from API with cache
+    data = await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
+    
+    # Import to database if data exists
+    if data and 'dados' in data and data['dados']:
+        try:
+            import_result = import_deputados_from_json(data)
+            print(f"DB Import: {import_result['imported']} new, {import_result['updated']} updated deputados")
+        except Exception as e:
+            print(f"Database import error: {e}")
+            # Continue even if DB import fails
+    
+    return data
 
 def get_demo_votacoes(deputado_id: int) -> List[Dict]:
     demo_data = {
@@ -370,7 +394,7 @@ async def get_votos_votacao(votacao_id: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votos: {str(e)}")
 
 @app.get("/deputados/{deputado_id}/analise")
-async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True, limite_proposicoes: int = None, usar_cache: bool = True):
+async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True, limite_proposicoes: int = None, usar_cache: bool = True, db: Session = Depends(get_database)):
     try:
         # Verificar cache primeiro
         cache_key = f"analise_completa:{deputado_id}:{limite_proposicoes or 'todas'}"
@@ -458,6 +482,14 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True,
             }
         }
         
+        # Import voting history to database
+        try:
+            import_result = import_voting_history_from_json(resultado_final)
+            print(f"DB Import: {import_result.get('imported_votes', 0)} votes imported for deputado {deputado_id}")
+        except Exception as e:
+            print(f"Database voting history import error: {e}")
+            # Continue even if DB import fails
+        
         if usar_cache and r and analise:
             try:
                 r.setex(cache_key, CACHE_TTL["deputados"], json.dumps(resultado_final))
@@ -474,7 +506,8 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True,
 async def analisar_perfil_deputado_completa(
     deputado_id: int,
     forcar_reprocessamento: bool = False,
-    batch_size: int = 5  # Processar em lotes para evitar timeout
+    batch_size: int = 5,  # Processar em lotes para evitar timeout
+    db: Session = Depends(get_database)
 ):
     """
     Análise completa do deputado processando TODAS as proposições em lotes
@@ -570,6 +603,21 @@ async def analisar_perfil_deputado_completa(
             "processado_em": datetime.now().isoformat()
         }
         
+        # Import voting history to database
+        try:
+            # Transform result format to match the expected voting history format
+            voting_response_format = {
+                "success": True,
+                "data": analise,
+                "proposicoes_analisadas": len(proposicoes_analisadas),
+                "processamento": resultado_final["estatisticas_processamento"]
+            }
+            import_result = import_voting_history_from_json(voting_response_format)
+            print(f"DB Import (Complete): {import_result.get('imported_votes', 0)} votes imported for deputado {deputado_id}")
+        except Exception as e:
+            print(f"Database voting history import error (complete): {e}")
+            # Continue even if DB import fails
+
         if r:
             try:
                 r.setex(cache_key, 604800, json.dumps(resultado_final))

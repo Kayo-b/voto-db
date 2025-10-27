@@ -20,7 +20,7 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
       setError('');
       try {
         const response = await api.analisarDeputado(deputado.id, false, controller.signal);
-        
+       console.log('DeputadoDetails is RUnning') 
         if (response.success) {
           setAnalise(response.data || null);
         } else {
