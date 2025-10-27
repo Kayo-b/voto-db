@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Deputado, Votacao } from '../types/api';
+import { Deputado, AnaliseDeputado } from '../types/api';
 
 interface DeputadoDetailsProps {
   deputado: Deputado;
@@ -8,35 +8,45 @@ interface DeputadoDetailsProps {
 }
 
 const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) => {
-  const [votacoes, setVotacoes] = useState<Votacao[]>([]);
+  const [analise, setAnalise] = useState<AnaliseDeputado | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    const fetchVotacoes = async (): Promise<void> => {
+    const controller = new AbortController();
+    
+    const fetchAnalise = async (): Promise<void> => {
       setLoading(true);
       setError('');
       try {
-        const response = await api.getDeputadoVotacoes(deputado.id);
+        const response = await api.analisarDeputado(deputado.id, false, controller.signal);
         
-        if (response.success === false && response.dados.length === 0) {
-          setError('Não foi possível carregar as votações recentes. Dados podem não estar disponíveis.');
-          setVotacoes([]);
+        if (response.success) {
+          setAnalise(response.data || null);
         } else {
-          setVotacoes(response.dados || []);
-          if (response.cached) {
-            console.log('Dados carregados do cache');
-          }
+          setError(response.message || 'Não foi possível carregar a análise do deputado. Dados podem não estar disponíveis.');
+          setAnalise(null);
         }
       } catch (error) {
-        console.error('Erro ao buscar votações:', error);
-        setError('Erro na conexão. Tente novamente mais tarde.');
-        setVotacoes([]);
+        // Only show error if request wasn't cancelled
+        if ((error as any)?.name !== 'CanceledError') {
+          console.error('Error fetching analysis:', error);
+          setError('Erro na conexão. Tente novamente mais tarde.');
+          setAnalise(null);
+        }
       }
-      setLoading(false);
+      
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     };
 
-    fetchVotacoes();
+    fetchAnalise();
+    
+    // Cleanup function to cancel the request
+    return () => {
+      controller.abort();
+    };
   }, [deputado.id]);
 
   const getVotoColor = (voto: string): string => {
@@ -48,6 +58,17 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
         return 'text-red-600 bg-red-100';
       case 'abstenção':
       case 'abstencao':
+        return 'text-yellow-600 bg-yellow-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getRelevanciaColor = (relevancia: string): string => {
+    switch (relevancia) {
+      case 'alta':
+        return 'text-red-600 bg-red-100';
+      case 'média':
         return 'text-yellow-600 bg-yellow-100';
       default:
         return 'text-gray-600 bg-gray-100';
@@ -113,7 +134,40 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
           </div>
         )}
 
-        {!loading && !error && votacoes.length === 0 && (
+        {/* Statistics Section */}
+        {!loading && analise && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Estatísticas de Votação</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-lg font-bold text-gray-800">
+                  {analise.estatisticas.total_votacoes_analisadas}
+                </div>
+                <div className="text-sm text-gray-600">Total Analisadas</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-lg font-bold text-blue-600">
+                  {analise.estatisticas.presenca_percentual}%
+                </div>
+                <div className="text-sm text-gray-600">Presença</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-lg font-bold text-green-600">
+                  {analise.estatisticas.votos_favoraveis}
+                </div>
+                <div className="text-sm text-gray-600">Votos Favoráveis</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-lg font-bold text-red-600">
+                  {analise.estatisticas.votos_contrarios}
+                </div>
+                <div className="text-sm text-gray-600">Votos Contrários</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && (!analise || analise.historico_votacoes.length === 0) && (
           <div className="text-center py-8">
             <p className="text-gray-500 mb-2">
               Não há registros de votações deste deputado nas proposições relevantes analisadas.
@@ -125,36 +179,37 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
           </div>
         )}
 
-        {!loading && votacoes.length > 0 && (
+        {!loading && analise && analise.historico_votacoes.length > 0 && (
           <div className="space-y-4">
-            {votacoes.slice(0, 10).map((votacao) => (
+            {analise.historico_votacoes.slice(0, 10).map((votacao, index) => (
               <div
-                key={votacao.id}
+                key={index}
                 className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-lg">
-                    {votacao.proposicao.siglaTipo} {votacao.proposicao.numero}/{votacao.proposicao.ano}
-                  </h3>
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${getVotoColor(votacao.voto)}`}
-                  >
-                    {votacao.voto}
-                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg">{votacao.proposicao}</h3>
+                    <p className="text-gray-700">{votacao.titulo}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className={`px-2 py-1 rounded-full text-sm font-medium ${getRelevanciaColor(votacao.relevancia)}`}>
+                      {votacao.relevancia}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getVotoColor(votacao.voto)}`}>
+                      {votacao.voto}
+                    </span>
+                  </div>
                 </div>
                 
-                <p className="text-gray-700 mb-2">{votacao.proposicao.ementa}</p>
-                
                 <div className="flex justify-between items-center text-sm text-gray-500">
-                  <span>{votacao.siglaOrgao}</span>
                   <span>{formatDate(votacao.data)}</span>
                 </div>
               </div>
             ))}
             
-            {votacoes.length > 10 && (
+            {analise.historico_votacoes.length > 10 && (
               <p className="text-center text-gray-500 mt-4">
-                Mostrando 10 de {votacoes.length} votações
+                Mostrando 10 de {analise.historico_votacoes.length} votações
               </p>
             )}
           </div>

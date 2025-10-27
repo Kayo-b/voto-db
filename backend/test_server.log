@@ -1,0 +1,230 @@
+nohup: ignoring input
+WARNING:main_db:Redis não disponível - cache de API desabilitado
+INFO:     Started server process [93311]
+INFO:     Waiting for application startup.
+INFO:database.connection:Database connection test successful
+INFO:main_db:Database connection successful
+INFO:database.connection:Database tables created successfully
+INFO:database.connection:Database initialized successfully
+INFO:main_db:Database initialized
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+Database integration enabled
+INFO:     127.0.0.1:59444 - "GET /api/proposicao/search?query=terceirizacao HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38328 - "GET /api/proposicao/search?query=terceirizacao HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49812 - "GET /proposicoes/buscar?tipo=PL&numero=6787&ano=2016 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49820 - "GET /proposicoes/buscar?tipo=PL&numero=6787&ano=2016 HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:database.connection:Database connection test successful
+INFO:     127.0.0.1:51790 - "GET /health HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 220593 (limit: 5)
+INFO:database.service:Fetching voting history for deputy 220593 from API
+WARNING:database.service:No voting data returned from API for deputy 220593
+
+Buscando histórico de votações do deputado ID: 220593
+INFO:     127.0.0.1:47942 - "GET /deputados/220593/votacoes?limit=5 HTTP/1.1" 200 OK
+INFO:main_db:Loading deputy 220593 analysis from database
+INFO:     127.0.0.1:60682 - "GET /deputados/220593/analise HTTP/1.1" 200 OK
+INFO:main_db:Background update: Analyzing deputy 220593 with fresh API data
+INFO:database.service:Fetching deputado 220593 from API
+ERROR:main_db:Background deputy analysis update failed: Instance <Deputado at 0x7f7779d2d090> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+INFO:main_db:Getting voting history for deputy 220593 (limit: 3)
+INFO:database.service:Fetching voting history for deputy 220593 from API
+WARNING:database.service:No voting data returned from API for deputy 220593
+
+============================================================
+PROCESSANDO: PL 6787/2016 - Reforma Trabalhista
+============================================================
+Iniciando processamento da proposição...
+[API] Buscando proposição PL 6787/2016...
+[API] Proposição PL 6787/2016 encontrada - ID: 2122076
+Proposição encontrada - ID: 2122076
+[DB] Detalhes da proposição 2122076 encontrados
+[API] Buscando votações da proposição 2122076...
+[API] 140 votações encontradas para proposição 2122076
+Encontradas 140 votações
+Votação principal identificada - ID: 2132667-2
+   Descrição: Aprovado.
+   Data: 2017-05-03T11:25:34
+Buscando votos da votação 2132667-2...
+[API] Buscando votos da votação 2132667-2...
+[API] Nenhum voto encontrado para votação 2132667-2
+Tentando votação alternativa 1 - ID: 2122076-411
+[API] Buscando votos da votação 2122076-411...
+[API] Nenhum voto encontrado para votação 2122076-411
+Tentando votação alternativa 2 - ID: 2122076-391
+[API] Buscando votos da votação 2122076-391...
+[API] 424 votos encontrados para votação 2122076-391
+Usando votação 2122076-391 com 424 votos
+Coletados 424 votos individuais
+
+Analisando deputado ID: 220593
+
+Buscando histórico de votações do deputado ID: 220593
+INFO:     127.0.0.1:54708 - "GET /deputados/220593/votacoes?limit=3 HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 220593 (limit: 3)
+INFO:database.service:Fetching voting history for deputy 220593 from API
+WARNING:database.service:No voting data returned from API for deputy 220593
+
+Buscando histórico de votações do deputado ID: 220593
+INFO:     127.0.0.1:54738 - "GET /deputados/220593/votacoes?limit=3 HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 220593 (limit: 3)
+INFO:database.service:Fetching voting history for deputy 220593 from API
+WARNING:database.service:No voting data returned from API for deputy 220593
+
+Buscando histórico de votações do deputado ID: 220593
+INFO:     127.0.0.1:54710 - "GET /deputados/220593/votacoes?limit=3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36326 - "GET /deputados?nome=nikolas HTTP/1.1" 200 OK
+INFO:main_db:Background update: Fetching deputados from API (nome=nikolas, partido=None, uf=None)
+INFO:main_db:Background update completed: 1 deputados updated
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:36326 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:36340 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41872 - "GET /deputados?nome=nikolas HTTP/1.1" 200 OK
+INFO:main_db:Background update: Fetching deputados from API (nome=nikolas, partido=None, uf=None)
+INFO:main_db:Background update completed: 1 deputados updated
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:44670 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:44686 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:main_db:Loading deputy 209787 analysis from database
+INFO:     127.0.0.1:47270 - "GET /deputados/209787/analise?incluir_todas=true HTTP/1.1" 200 OK
+INFO:main_db:Background update: Analyzing deputy 209787 with fresh API data
+INFO:database.service:Fetching deputado 209787 from API
+ERROR:main_db:Background deputy analysis update failed: Instance <Deputado at 0x7f7779503350> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+
+============================================================
+PROCESSANDO: PL 6787/2016 - Reforma Trabalhista
+============================================================
+Iniciando processamento da proposição...
+[API] Buscando proposição PL 6787/2016...
+[API] Proposição PL 6787/2016 encontrada - ID: 2122076
+Proposição encontrada - ID: 2122076
+[DB] Detalhes da proposição 2122076 encontrados
+[API] Buscando votações da proposição 2122076...
+[API] 140 votações encontradas para proposição 2122076
+Encontradas 140 votações
+Votação principal identificada - ID: 2132667-2
+   Descrição: Aprovado.
+   Data: 2017-05-03T11:25:34
+Buscando votos da votação 2132667-2...
+[API] Buscando votos da votação 2132667-2...
+[API] Nenhum voto encontrado para votação 2132667-2
+Tentando votação alternativa 1 - ID: 2122076-411
+[API] Buscando votos da votação 2122076-411...
+[API] Nenhum voto encontrado para votação 2122076-411
+Tentando votação alternativa 2 - ID: 2122076-391
+[API] Buscando votos da votação 2122076-391...
+[API] 424 votos encontrados para votação 2122076-391
+Usando votação 2122076-391 com 424 votos
+Coletados 424 votos individuais
+
+Analisando deputado ID: 209787
+INFO:     127.0.0.1:46334 - "GET /deputados?nome=nikolas HTTP/1.1" 200 OK
+INFO:main_db:Background update: Fetching deputados from API (nome=nikolas, partido=None, uf=None)
+INFO:main_db:Background update completed: 1 deputados updated
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:46334 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:main_db:Getting voting history for deputy 209787 (limit: 50)
+INFO:database.service:Fetching voting history for deputy 209787 from API
+WARNING:database.service:No voting data returned from API for deputy 209787
+
+Buscando histórico de votações do deputado ID: 209787
+INFO:     127.0.0.1:46788 - "GET /deputados/209787/votacoes HTTP/1.1" 200 OK
+INFO:main_db:Loading deputy 209787 analysis from database
+INFO:     127.0.0.1:46334 - "GET /deputados/209787/analise HTTP/1.1" 200 OK
+INFO:main_db:Background update: Analyzing deputy 209787 with fresh API data
+INFO:database.service:Fetching deputado 209787 from API
+ERROR:main_db:Background deputy analysis update failed: Instance <Deputado at 0x7f777957a890> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+INFO:main_db:Loading deputy 209787 analysis from database
+
+============================================================
+PROCESSANDO: PL 6787/2016 - Reforma Trabalhista
+============================================================
+Iniciando processamento da proposição...
+[API] Buscando proposição PL 6787/2016...
+[API] Proposição PL 6787/2016 encontrada - ID: 2122076
+Proposição encontrada - ID: 2122076
+[DB] Detalhes da proposição 2122076 encontrados
+[API] Buscando votações da proposição 2122076...
+[API] 140 votações encontradas para proposição 2122076
+Encontradas 140 votações
+Votação principal identificada - ID: 2132667-2
+   Descrição: Aprovado.
+   Data: 2017-05-03T11:25:34
+Buscando votos da votação 2132667-2...
+[API] Buscando votos da votação 2132667-2...
+[API] Nenhum voto encontrado para votação 2132667-2
+Tentando votação alternativa 1 - ID: 2122076-411
+[API] Buscando votos da votação 2122076-411...
+[API] Nenhum voto encontrado para votação 2122076-411
+Tentando votação alternativa 2 - ID: 2122076-391
+[API] Buscando votos da votação 2122076-391...
+[API] 424 votos encontrados para votação 2122076-391
+Usando votação 2122076-391 com 424 votos
+Coletados 424 votos individuais
+
+Analisando deputado ID: 209787
+INFO:     127.0.0.1:46334 - "GET /deputados/209787/analise HTTP/1.1" 200 OK
+INFO:main_db:Background update: Analyzing deputy 209787 with fresh API data
+INFO:database.service:Fetching deputado 209787 from API
+ERROR:main_db:Background deputy analysis update failed: Instance <Deputado at 0x7f777a047050> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+INFO:main_db:Loading deputy 220593 analysis from database
+
+============================================================
+PROCESSANDO: PL 6787/2016 - Reforma Trabalhista
+============================================================
+Iniciando processamento da proposição...
+[API] Buscando proposição PL 6787/2016...
+[API] Proposição PL 6787/2016 encontrada - ID: 2122076
+Proposição encontrada - ID: 2122076
+[DB] Detalhes da proposição 2122076 encontrados
+[API] Buscando votações da proposição 2122076...
+[API] 140 votações encontradas para proposição 2122076
+Encontradas 140 votações
+Votação principal identificada - ID: 2132667-2
+   Descrição: Aprovado.
+   Data: 2017-05-03T11:25:34
+Buscando votos da votação 2132667-2...
+[API] Buscando votos da votação 2132667-2...
+[API] Nenhum voto encontrado para votação 2132667-2
+Tentando votação alternativa 1 - ID: 2122076-411
+[API] Buscando votos da votação 2122076-411...
+[API] Nenhum voto encontrado para votação 2122076-411
+Tentando votação alternativa 2 - ID: 2122076-391
+[API] Buscando votos da votação 2122076-391...
+[API] 424 votos encontrados para votação 2122076-391
+Usando votação 2122076-391 com 424 votos
+Coletados 424 votos individuais
+
+Analisando deputado ID: 209787
+INFO:     127.0.0.1:50798 - "GET /deputados/220593/analise HTTP/1.1" 200 OK
+INFO:main_db:Background update: Analyzing deputy 220593 with fresh API data
+INFO:database.service:Fetching deputado 220593 from API
+ERROR:main_db:Background deputy analysis update failed: Instance <Deputado at 0x7f777a046d50> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [93311]

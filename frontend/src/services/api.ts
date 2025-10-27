@@ -1,11 +1,11 @@
 import axios, { AxiosResponse } from 'axios';
-import { DeputadosResponse, VotacoesResponse } from '../types/api';
+import { DeputadosResponse, VotacoesResponse, AnaliseDeputadoResponse } from '../types/api';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
 const apiClient = axios.create({
   baseURL: API_BASE,
-  timeout: 10000,
+  timeout: 30000, // Increased timeout for analysis operations
 });
 
 export const api = {
@@ -60,15 +60,24 @@ export const api = {
     }
   },
 
-  analisarDeputado: async (id: number, incluirTodas: boolean = false) => {
+  analisarDeputado: async (id: number, incluirTodas: boolean = false, signal?: AbortSignal): Promise<AnaliseDeputadoResponse> => {
     try {
-      const response = await apiClient.get(
-        `/deputados/${id}/analise${incluirTodas ? '?incluir_todas=true' : ''}`
-      );
+      const url = `/deputados/${id}/analise${incluirTodas ? '?incluir_todas=true' : ''}`;
+      const response = await apiClient.get(url, { signal });
       return response.data;
     } catch (error) {
+      // Don't log cancelled requests as errors
+      if ((error as any)?.name === 'CanceledError') {
+        throw error;
+      }
+      
       console.error('Erro ao analisar deputado:', error);
-      throw error;
+      
+      // Return error response structure
+      return {
+        success: false,
+        message: 'Erro ao conectar com a API'
+      };
     }
   }
 };

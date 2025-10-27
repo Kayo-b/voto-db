@@ -12,6 +12,18 @@
       "data_aprovacao": "2017-07-13",
       "relevancia": "alta",
       "impacto": "Alterou 117 pontos da CLT"
+    },
+    {
+      "tipo": "PEC",
+      "numero": "3/2021",
+      "casa_origem": "Câmara",
+      "titulo": "PEC da Blindagem (PEC das Prerrogativas)",
+      "lei": null,
+      "id_proposicao": "2270800",
+      "id_votacao_principal": "13161",
+      "data_aprovacao": "2025-09-17",
+      "relevancia": "alta",
+      "impacto": "Exigia autorização prévia do Congresso para processar parlamentares criminalmente - Rejeitada no Senado em 24/09/2025"
     }
   ],
   "metadata": {

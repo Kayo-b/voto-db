@@ -1,0 +1,19 @@
+nohup: ignoring input
+WARNING:main_db:Redis não disponível - cache de API desabilitado
+INFO:     Started server process [110898]
+INFO:     Waiting for application startup.
+INFO:database.connection:Database connection test successful
+INFO:main_db:Database connection successful
+INFO:database.connection:Database tables created successfully
+INFO:database.connection:Database initialized successfully
+INFO:main_db:Database initialized
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:database.service:Fetching deputado 178864 from API
+ERROR:main_db:Error in get_deputado_detalhes: Instance <Deputado at 0x7fb5f2f81fd0> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+Database integration enabled
+INFO:     127.0.0.1:57522 - "GET /deputados/178864 HTTP/1.1" 500 Internal Server Error
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [110898]

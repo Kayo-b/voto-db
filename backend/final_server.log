@@ -1,0 +1,28 @@
+nohup: ignoring input
+WARNING:__main__:Redis não disponível - cache de API desabilitado
+/home/kxyx/projects/voto-db/backend/main_db.py:86: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+INFO:     Started server process [41591]
+INFO:     Waiting for application startup.
+INFO:database.connection:Database connection test successful
+INFO:__main__:Database connection successful
+INFO:database.connection:Database tables created successfully
+INFO:database.connection:Database initialized successfully
+INFO:__main__:Database initialized
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:database.service:Fetching proposição PL 6787/2016 from API
+ERROR:__main__:Error in buscar_proposicao: Instance <Proposicao at 0x7f03fb5aa270> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+Database integration enabled
+[API] Buscando proposição PL 6787/2016...
+[API] Proposição PL 6787/2016 encontrada - ID: 2122076
+INFO:     127.0.0.1:48674 - "GET /proposicoes/buscar?tipo=PL&numero=6787&ano=2016 HTTP/1.1" 500 Internal Server Error
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [41591]
