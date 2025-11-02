@@ -58,23 +58,25 @@ class AnaliseDeputadoRequest(BaseModel):
     incluir_proposicoes: Optional[List[str]] = None
 
 async def fetch_with_cache(endpoint, cache_key, ttl):
-    if r:
-        try:
-            cached = r.get(cache_key)
-            if cached:
-                return json.loads(cached)
-        except:
-            pass
+    # Redis cache commented out - using database-first approach instead
+    # if r:
+    #     try:
+    #         cached = r.get(cache_key)
+    #         if cached:
+    #             return json.loads(cached)
+    #     except:
+    #         pass
     
     response = requests.get(f"{CAMARA_BASE_URL}{endpoint}")
     if response.status_code == 200:
         data = response.json()
         
-        if r:
-            try:
-                r.setex(cache_key, ttl, json.dumps(data))
-            except:
-                pass
+        # Redis cache commented out - using database-first approach instead
+        # if r:
+        #     try:
+        #         r.setex(cache_key, ttl, json.dumps(data))
+        #     except:
+        #         pass
         
         return data
     return None
@@ -82,24 +84,68 @@ async def fetch_with_cache(endpoint, cache_key, ttl):
 @app.get("/deputados")
 async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
     """
-    Get deputados and automatically import them to database
+    Get deputados - first from database, then from government API if needed
     """
-    endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
-    cache_key = f"deputados:{nome or 'all'}"
+    from database.model import Deputado, Partido
     
-    # Fetch from API with cache
-    data = await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
+    try:
+        # STEP 1: Try to get from database first (persistent storage)
+        query = db.query(Deputado)
+        if nome:
+            query = query.filter(Deputado.nome.ilike(f"%{nome}%"))
+        
+        db_deputados = query.order_by(Deputado.nome).all()
+        
+        # If we found deputados in database, return them
+        if db_deputados:
+            print(f"DB Hit: Found {len(db_deputados)} deputados in database")
+            
+            # Convert to API format
+            dados = []
+            for dep in db_deputados:
+                dados.append({
+                    "id": dep.id,
+                    "uri": f"https://dadosabertos.camara.leg.br/api/v2/deputados/{dep.id}",
+                    "nome": dep.nome,
+                    "siglaPartido": dep.partido.sigla if dep.partido else None,
+                    "uriPartido": f"https://dadosabertos.camara.leg.br/api/v2/partidos/{dep.partido_id}" if dep.partido_id else None,
+                    "siglaUf": dep.sigla_uf,
+                    "idLegislatura": dep.legislatura_id,
+                    "urlFoto": dep.url_foto,
+                    "email": dep.email
+                })
+            
+            return {
+                "dados": dados,
+                "links": [{"rel": "self", "href": f"/deputados{'?nome=' + nome if nome else ''}"}]
+            }
+        
+        # STEP 2: Not found in database, fetch from government API
+        print(f"DB Miss: Deputados not found in database, fetching from government API")
+        
+        endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
+        cache_key = f"deputados:{nome or 'all'}"
+        
+        # Fetch from government API
+        data = await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
+        
+        # Import to database if data exists
+        if data and 'dados' in data and data['dados']:
+            try:
+                import_result = import_deputados_from_json(data)
+                print(f"DB Import: {import_result['imported']} new, {import_result['updated']} updated deputados")
+            except Exception as e:
+                print(f"Database import error: {e}")
+                # Continue even if DB import fails
+        
+        return data
     
-    # Import to database if data exists
-    if data and 'dados' in data and data['dados']:
-        try:
-            import_result = import_deputados_from_json(data)
-            print(f"DB Import: {import_result['imported']} new, {import_result['updated']} updated deputados")
-        except Exception as e:
-            print(f"Database import error: {e}")
-            # Continue even if DB import fails
-    
-    return data
+    except Exception as e:
+        print(f"Error in get_deputados: {e}")
+        # Fallback to API if database fails
+        endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
+        cache_key = f"deputados:{nome or 'all'}"
+        return await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
 
 def get_demo_votacoes(deputado_id: int) -> List[Dict]:
     demo_data = {
