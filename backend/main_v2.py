@@ -240,24 +240,54 @@ def get_demo_votacoes(deputado_id: int) -> List[Dict]:
     return demo_data.get(deputado_id, [])
 
 @app.get("/deputados/{deputado_id}/votacoes")
-async def get_deputado_votacoes(deputado_id: int):
+async def get_deputado_votacoes(deputado_id: int, db: Session = Depends(get_database)):
+    """
+    Get deputado voting history - first from database, then from government API if needed
+    """
+    from database.voting_data_service import (
+        get_deputado_votacoes_from_database, 
+        check_deputado_has_voting_data,
+        import_voting_data_from_json
+    )
+    
     try:
-        cache_key = f"deputado:{deputado_id}:votacoes_relevantes"
+        # STEP 1: Try to get from database first (persistent storage)
+        if check_deputado_has_voting_data(deputado_id):
+            print(f"DB Hit: Found voting data for deputado {deputado_id} in database")
+            
+            db_votacoes = get_deputado_votacoes_from_database(deputado_id, limit=10)
+            
+            return {
+                "success": True,
+                "dados": db_votacoes,
+                "total": len(db_votacoes),
+                "cached": False,  # From database, not cache
+                "links": []
+            }
         
-        if r:
-            try:
-                cached = r.get(cache_key)
-                if cached:
-                    cached_data = json.loads(cached)
-                    if cached_data:
-                        return {"success": True, "dados": cached_data, "cached": True, "total": len(cached_data), "links": []}
-            except:
-                pass
+        # STEP 2: Not found in database, fetch from government API and import
+        print(f"DB Miss: Voting data for deputado {deputado_id} not found, fetching from government API")
+        
+        # Redis cache check (commented out as requested)
+        # cache_key = f"deputado:{deputado_id}:votacoes_relevantes"
+        # if r:
+        #     try:
+        #         cached = r.get(cache_key)
+        #         if cached:
+        #             cached_data = json.loads(cached)
+        #             if cached_data:
+        #                 return {"success": True, "dados": cached_data, "cached": True, "total": len(cached_data), "links": []}
+        #     except:
+        #         pass
         
         dados_proposicoes = analisador.carregar_dados("data/proposicoes.json")
         proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])[:5]
         
         votacoes_deputado = []
+        import_stats = {
+            'total_imported': 0,
+            'total_errors': 0
+        }
         
         for prop in proposicoes_relevantes:
             try:
@@ -273,6 +303,29 @@ async def get_deputado_votacoes(deputado_id: int):
                         id_votacao = votacao_principal['id']
                         votos = analisador.buscar_votos_votacao(id_votacao)
                         
+                        # Import to database
+                        try:
+                            proposicao_data = {
+                                'id': int(id_proposicao),
+                                'siglaTipo': prop.get("tipo", "").split()[0] if prop.get("tipo") else "",
+                                'numero': prop.get("numero", "").split("/")[0] if prop.get("numero") else "",
+                                'ano': int(prop.get("numero", "").split("/")[1]) if "/" in prop.get("numero", "") else datetime.now().year,
+                                'ementa': prop.get("titulo", ""),
+                                'uri': f"https://dadosabertos.camara.leg.br/api/v2/proposicoes/{id_proposicao}"
+                            }
+                            
+                            import_result = import_voting_data_from_json(
+                                proposicao_data, 
+                                votacao_principal, 
+                                votos
+                            )
+                            import_stats['total_imported'] += 1
+                            
+                        except Exception as import_error:
+                            print(f"Import error for proposição {id_proposicao}: {import_error}")
+                            import_stats['total_errors'] += 1
+                        
+                        # Build response data (regardless of import success/failure)
                         for voto in votos:
                             dep_data = voto.get('deputado_', {})
                             if dep_data.get('id') == deputado_id:
@@ -294,33 +347,50 @@ async def get_deputado_votacoes(deputado_id: int):
                                 }
                                 votacoes_deputado.append(votacao_info)
                                 break
+                                
                 except Exception as api_error:
                     print(f"API timeout/error for proposition {prop.get('numero', 'N/A')}: {api_error}")
+                    import_stats['total_errors'] += 1
                     continue
                             
             except Exception as e:
                 print(f"Erro ao processar proposição {prop.get('numero', 'N/A')}: {e}")
+                import_stats['total_errors'] += 1
                 continue
         
+        # Fallback to demo data if no API data found
         if not votacoes_deputado:
             print(f"No API data found for deputy {deputado_id}, using demo data")
             votacoes_deputado = get_demo_votacoes(deputado_id)
         
         votacoes_deputado.sort(key=lambda x: x.get('data', ''), reverse=True)
         
-        if votacoes_deputado and r:
-            try:
-                r.setex(cache_key, CACHE_TTL["votacoes"], json.dumps(votacoes_deputado))
-            except:
-                pass
+        print(f"DB Import Stats: {import_stats['total_imported']} imported, {import_stats['total_errors']} errors")
+        
+        # Redis cache save (commented out as requested)
+        # if votacoes_deputado and r:
+        #     try:
+        #         r.setex(cache_key, CACHE_TTL["votacoes"], json.dumps(votacoes_deputado))
+        #     except:
+        #         pass
         
         return {
             "success": True,
             "dados": votacoes_deputado,
             "total": len(votacoes_deputado),
             "cached": False,
-            "links": [],
-            "fonte": "demo" if not votacoes_deputado or deputado_id in [74847, 178864, 178976] else "api"
+            "links": []
+        }
+    
+    except Exception as e:
+        print(f"Error in get_deputado_votacoes: {e}")
+        return {
+            "success": False,
+            "message": f"Erro ao buscar votações: {str(e)}",
+            "dados": [],
+            "total": 0,
+            "cached": False,
+            "links": []
         }
         
     except Exception as e:
@@ -441,23 +511,88 @@ async def get_votos_votacao(votacao_id: str):
 
 @app.get("/deputados/{deputado_id}/analise")
 async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True, limite_proposicoes: int = None, usar_cache: bool = True, db: Session = Depends(get_database)):
+    """
+    Analyze deputy profile - first from database, then from government API if needed
+    """
+    from database.model import EstatisticaDeputado
+    
     try:
-        # Verificar cache primeiro
-        cache_key = f"analise_completa:{deputado_id}:{limite_proposicoes or 'todas'}"
+        # STEP 1: Try to get analysis from database first (persistent storage)
+        estatisticas = db.query(EstatisticaDeputado).filter(
+            EstatisticaDeputado.deputado_id == deputado_id
+        ).first()
         
-        if usar_cache and r:
-            try:
-                cached = r.get(cache_key)
-                if cached:
-                    print(f"Análise encontrada no cache para deputado {deputado_id}")
-                    return {
-                        "success": True,
-                        "data": json.loads(cached),
-                        "cached": True,
-                        "message": "Análise carregada do cache"
-                    }
-            except:
-                pass
+        if estatisticas and estatisticas.total_votacoes_analisadas > 0:
+            print(f"DB Hit: Found analysis for deputado {deputado_id} in database")
+            
+            # Get deputado info
+            from database.model import Deputado, Voto, Votacao, Proposicao
+            deputado = db.query(Deputado).filter(Deputado.id == deputado_id).first()
+            
+            # Get voting history from database
+            votos = db.query(Voto).join(Votacao).join(Proposicao).filter(
+                Voto.deputado_id == deputado_id
+            ).order_by(Votacao.data_votacao.desc()).limit(10).all()
+            
+            # Build historico_votacoes
+            historico_votacoes = []
+            for voto in votos:
+                votacao = voto.votacao
+                proposicao = votacao.proposicao
+                
+                historico_votacoes.append({
+                    "proposicao": proposicao.codigo or f"{proposicao.tipo} {proposicao.numero}/{proposicao.ano}",
+                    "titulo": proposicao.titulo or proposicao.ementa or "",
+                    "voto": voto.voto,
+                    "data": votacao.data_votacao.isoformat() if votacao.data_votacao else "",
+                    "relevancia": proposicao.relevancia or "media"
+                })
+            
+            # Convert database statistics to expected frontend format
+            analysis_data = {
+                "deputado": {
+                    "id": deputado_id,
+                    "nome": deputado.nome if deputado else f"Deputado {deputado_id}",
+                    "nome_parlamentar": deputado.nome_parlamentar if deputado and deputado.nome_parlamentar else (deputado.nome if deputado else f"Deputado {deputado_id}"),
+                    "partido": deputado.partido.sigla if deputado and deputado.partido else "N/A",
+                    "uf": deputado.sigla_uf if deputado else "N/A",
+                    "situacao": deputado.situacao if deputado else "N/A"
+                },
+                "historico_votacoes": historico_votacoes,
+                "estatisticas": {
+                    "total_votacoes_analisadas": estatisticas.total_votacoes_analisadas,
+                    "participacao": estatisticas.participacao,
+                    "presenca_percentual": estatisticas.presenca_percentual,
+                    "votos_favoraveis": estatisticas.votos_favoraveis,
+                    "votos_contrarios": estatisticas.votos_contrarios
+                }
+            }
+            
+            return {
+                "success": True,
+                "data": analysis_data,
+                "message": "Análise carregada do banco de dados"
+            }
+        
+        # STEP 2: Not found in database, proceed with API analysis
+        print(f"DB Miss: Analysis for deputado {deputado_id} not found, generating from government API")
+        
+        # Verificar cache Redis (commented out as requested)
+        # cache_key = f"analise_completa:{deputado_id}:{limite_proposicoes or 'todas'}"
+        # 
+        # if usar_cache and r:
+        #     try:
+        #         cached = r.get(cache_key)
+        #         if cached:
+        #             print(f"Análise encontrada no cache para deputado {deputado_id}")
+        #             return {
+        #                 "success": True,
+        #                 "data": json.loads(cached),
+        #                 "cached": True,
+        #                 "message": "Análise carregada do cache"
+        #             }
+        #     except:
+        #         pass
         
         proposicoes_analisadas = []
         
@@ -536,12 +671,14 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True,
             print(f"Database voting history import error: {e}")
             # Continue even if DB import fails
         
-        if usar_cache and r and analise:
-            try:
-                r.setex(cache_key, CACHE_TTL["deputados"], json.dumps(resultado_final))
-                print(f"Análise salva no cache para deputado {deputado_id}")
-            except:
-                pass
+        # Redis cache save (commented out as requested)
+        # cache_key = f"analise_completa:{deputado_id}:{limite_proposicoes or 'todas'}"
+        # if usar_cache and r and analise:
+        #     try:
+        #         r.setex(cache_key, CACHE_TTL["deputados"], json.dumps(resultado_final))
+        #         print(f"Análise salva no cache para deputado {deputado_id}")
+        #     except:
+        #         pass
         
         return resultado_final
         
