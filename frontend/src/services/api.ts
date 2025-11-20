@@ -60,6 +60,42 @@ export const api = {
     }
   },
 
+  validateProposicao: async (codigo: string) => {
+    try {
+      const response = await apiClient.post('/proposicoes/relevantes/validate', {
+        codigo
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao validar proposição:', error);
+      throw error;
+    }
+  },
+
+  addProposicaoRelevante: async (codigo: string, titulo?: string, relevancia?: string) => {
+    try {
+      const response = await apiClient.post('/proposicoes/relevantes', {
+        codigo,
+        titulo,
+        relevancia
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao adicionar proposição:', error);
+      throw error;
+    }
+  },
+
+  deleteProposicaoRelevante: async (id: number) => {
+    try {
+      const response = await apiClient.delete(`/proposicoes/relevantes/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao deletar proposição:', error);
+      throw error;
+    }
+  },
+
   analisarDeputado: async (id: number, incluirTodas: boolean = false, signal?: AbortSignal): Promise<AnaliseDeputadoResponse> => {
     try {
       const url = `/deputados/${id}/analise${incluirTodas ? '?incluir_todas=true' : ''}`;

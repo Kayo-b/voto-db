@@ -53,6 +53,14 @@ class ProposicaoRequest(BaseModel):
     titulo: str
     relevancia: str = "média"
 
+class AddProposicaoRequest(BaseModel):
+    codigo: str  # Format: "PL 6787/2016"
+    titulo: Optional[str] = None
+    relevancia: str = "média"
+
+class ValidateProposicaoRequest(BaseModel):
+    codigo: str  # Format: "PL 6787/2016"
+
 class AnaliseDeputadoRequest(BaseModel):
     deputado_id: int
     incluir_proposicoes: Optional[List[str]] = None
@@ -280,8 +288,19 @@ async def get_deputado_votacoes(deputado_id: int, db: Session = Depends(get_data
         #     except:
         #         pass
         
-        dados_proposicoes = analisador.carregar_dados("data/proposicoes.json")
-        proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])[:5]
+        # Get proposições from database instead of hardcoded JSON
+        from database.proposicao_service import get_all_proposicoes_relevantes
+        proposicoes_db = get_all_proposicoes_relevantes()
+        
+        # Convert to format expected by the rest of the code
+        proposicoes_relevantes = []
+        for prop in proposicoes_db[:5]:  # Limit to 5 for now
+            proposicoes_relevantes.append({
+                "id_proposicao": prop['id'],
+                "tipo": f"{prop['tipo']} {prop['numero']}/{prop['ano']}",
+                "numero": f"{prop['numero']}/{prop['ano']}",
+                "titulo": prop['titulo']
+            })
         
         votacoes_deputado = []
         import_stats = {
@@ -411,8 +430,10 @@ async def get_deputado_detalhes(deputado_id: int):
     cache_key = f"deputado:{deputado_id}:detalhes"
     return await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
 
-@app.get("/proposicoes/relevantes")
-async def get_proposicoes_relevantes():
+# OLD ENDPOINT - Replaced by database-based version below (line ~900)
+# Keeping for backward compatibility but should be removed later
+@app.get("/proposicoes/relevantes/legacy")
+async def get_proposicoes_relevantes_legacy():
     try:
         dados = analisador.carregar_dados("proposicoes.json")
         return {
@@ -597,8 +618,19 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True,
         proposicoes_analisadas = []
         
         if incluir_todas:
-            dados_proposicoes = analisador.carregar_dados("proposicoes.json")
-            proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])
+            # Get proposições from database instead of hardcoded JSON
+            from database.proposicao_service import get_all_proposicoes_relevantes
+            proposicoes_db = get_all_proposicoes_relevantes()
+            
+            # Convert to format expected by analisador
+            proposicoes_relevantes = []
+            for prop in proposicoes_db:
+                proposicoes_relevantes.append({
+                    "id_proposicao": prop['id'],
+                    "tipo": f"{prop['tipo']} {prop['numero']}/{prop['ano']}",
+                    "numero": f"{prop['numero']}/{prop['ano']}",
+                    "titulo": prop['titulo']
+                })
             
             if limite_proposicoes:
                 proposicoes_relevantes = proposicoes_relevantes[:limite_proposicoes]
@@ -711,8 +743,19 @@ async def analisar_perfil_deputado_completa(
             except:
                 pass
         
-        dados_proposicoes = analisador.carregar_dados("proposicoes.json")
-        proposicoes_relevantes = dados_proposicoes.get("votacoes_historicas", [])
+        # Get proposições from database instead of hardcoded JSON
+        from database.proposicao_service import get_all_proposicoes_relevantes
+        proposicoes_db = get_all_proposicoes_relevantes()
+        
+        # Convert to format expected by analisador
+        proposicoes_relevantes = []
+        for prop in proposicoes_db:
+            proposicoes_relevantes.append({
+                "id_proposicao": prop['id'],
+                "tipo": f"{prop['tipo']} {prop['numero']}/{prop['ano']}",
+                "numero": f"{prop['numero']}/{prop['ano']}",
+                "titulo": prop['titulo']
+            })
         
         print(f"Iniciando análise COMPLETA para deputado {deputado_id}")
         print(f"Total de proposições a processar: {len(proposicoes_relevantes)}")
@@ -845,7 +888,19 @@ async def clear_cache(cache_type: str = "all"):
 @app.get("/estatisticas/geral")
 async def get_estatisticas_gerais():
     try:
-        dados_proposicoes = analisador.carregar_dados("proposicoes.json")
+        # Get proposições from database instead of hardcoded JSON
+        from database.proposicao_service import get_all_proposicoes_relevantes
+        proposicoes_db = get_all_proposicoes_relevantes()
+        
+        # Convert to expected format
+        dados_proposicoes = {
+            "votacoes_historicas": [{
+                "id_proposicao": prop['id'],
+                "tipo": f"{prop['tipo']} {prop['numero']}/{prop['ano']}",
+                "numero": f"{prop['numero']}/{prop['ano']}",
+                "titulo": prop['titulo']
+            } for prop in proposicoes_db]
+        }
         
         cache_stats = {"total_cached": 0}
         if r:
@@ -876,6 +931,137 @@ async def get_estatisticas_gerais():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao obter estatísticas: {str(e)}")
 
+# ============================================================
+# PROPOSIÇÕES RELEVANTES - CRUD ENDPOINTS
+# ============================================================
+
+@app.get("/proposicoes/relevantes")
+async def get_proposicoes_relevantes(relevancia: Optional[str] = None):
+    """
+    Get all relevant proposições from database.
+    Replaces hardcoded JSON file system.
+    """
+    from database.proposicao_service import get_all_proposicoes_relevantes
+    
+    try:
+        proposicoes = get_all_proposicoes_relevantes(relevancia)
+        
+        # Format to match frontend expectation
+        votacoes_historicas = []
+        for prop in proposicoes:
+            # Generate impacto text
+            ementa = prop.get("ementa", "")
+            impacto = ementa if ementa else f"Proposição de relevância {prop.get('relevancia', 'média')} para análise de votações dos deputados"
+            
+            votacoes_historicas.append({
+                "id": prop.get("id"),
+                "tipo": prop.get("tipo", ""),
+                "numero": prop.get("numero", ""),
+                "titulo": prop.get("titulo", ""),
+                "relevancia": prop.get("relevancia", ""),
+                "impacto": impacto,
+                "status": None,  # Can be populated later if needed
+                "data_aprovacao": None  # Can be populated later if needed
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "votacoes_historicas": votacoes_historicas,
+                "metadata": {
+                    "total_proposicoes": len(votacoes_historicas),
+                    "periodo": "Sistema"
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar proposições: {str(e)}")
+
+@app.post("/proposicoes/relevantes")
+async def add_proposicao_relevante(request: AddProposicaoRequest):
+    """
+    Add a new relevant proposição after validating with government API.
+    Validates that the proposição exists and has nominal voting sessions.
+    """
+    from database.proposicao_service import add_proposicao
+    
+    try:
+        result = add_proposicao(
+            codigo=request.codigo,
+            titulo=request.titulo,
+            relevancia=request.relevancia
+        )
+        
+        if result['success']:
+            return {
+                "success": True,
+                "message": f"Proposição {request.codigo} adicionada com sucesso",
+                "data": result['data']
+            }
+        else:
+            raise HTTPException(status_code=400, detail=result['error'])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao adicionar proposição: {str(e)}")
+
+@app.post("/proposicoes/relevantes/validate")
+async def validate_proposicao(request: ValidateProposicaoRequest):
+    """
+    Validate a proposição without adding it to database.
+    Checks if it exists in government API and has nominal voting.
+    """
+    from database.proposicao_service import validate_proposicao_exists
+    
+    try:
+        validation = validate_proposicao_exists(request.codigo)
+        
+        if validation['valid']:
+            return {
+                "success": True,
+                "message": "Proposição válida e possui votações nominais",
+                "data": {
+                    "codigo": validation['codigo'],
+                    "proposicao_id": validation['proposicao_id'],
+                    "tipo": validation['tipo'],
+                    "ementa": validation['ementa'][:200] + "..." if len(validation.get('ementa', '')) > 200 else validation.get('ementa', ''),
+                    "total_votacoes_nominais": validation['total_votacoes_nominais'],
+                    "nominal_votacoes": validation['nominal_votacoes']
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "error": validation['error']
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao validar proposição: {str(e)}")
+
+@app.delete("/proposicoes/relevantes/{proposicao_id}")
+async def delete_proposicao_relevante(proposicao_id: int):
+    """
+    Remove a proposição from the relevant list.
+    """
+    from database.proposicao_service import remove_proposicao
+    
+    try:
+        result = remove_proposicao(proposicao_id)
+        
+        if result['success']:
+            return {
+                "success": True,
+                "message": result['message']
+            }
+        else:
+            raise HTTPException(status_code=404, detail=result['error'])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao remover proposição: {str(e)}")
+
 @app.get("/health")
 async def health_check():
     return {
@@ -898,4 +1084,4 @@ def salvar_proposicao_analisada(resultado: Dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

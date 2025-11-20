@@ -1,0 +1,42 @@
+{
+  "PL_4614_2024": {
+    "id": 2473375,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2473375",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 4614,
+    "ano": 2024,
+    "ementa": "Altera a Lei nº 8.171, de 17 de janeiro de 1991, a Lei nº 8.742, de 7 de dezembro de 1993, a Lei nº 10.633, de 27 de dezembro de 2002, e a Lei nº 14.601, de 19 de junho de 2023, estabelece disposições para políticas públicas, e dá outras providências.",
+    "dataApresentacao": "2024-11-29T15:50"
+  },
+  "PEC_3_2021": {
+    "id": 2270800,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2270800",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 3,
+    "ano": 2021,
+    "ementa": "Altera os arts. 14, 27, 53, 102 e 105 da Constituição Federal, para dispor sobre as prerrogativas parlamentares e dá outras providências.",
+    "dataApresentacao": "2021-02-24T11:47"
+  },
+  "PEC_45_2019": {
+    "id": 2196833,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2196833",
+    "siglaTipo": "PEC",
+    "codTipo": 136,
+    "numero": 45,
+    "ano": 2019,
+    "ementa": "Altera o Sistema Tributário Nacional e dá outras providências.  NOVA EMENTA: Altera o Sistema Tributário Nacional.",
+    "dataApresentacao": "2019-04-03T21:31"
+  },
+  "PL_6787_2016": {
+    "id": 2122076,
+    "uri": "https://dadosabertos.camara.leg.br/api/v2/proposicoes/2122076",
+    "siglaTipo": "PL",
+    "codTipo": 139,
+    "numero": 6787,
+    "ano": 2016,
+    "ementa": "Altera o Decreto-Lei nº 5.452, de 1º de maio de 1943 - Consolidação das Leis do Trabalho, e a Lei nº 6.019, de 3 de janeiro de 1974, para dispor sobre eleições de representantes dos trabalhadores no local de trabalho e sobre trabalho temporário, e dá outras providências.  NOVA EMENTA: Altera a Consolidação das Leis do Trabalho (CLT), aprovada pelo Decreto-Lei nº 5.452, de 1º de maio de 1943, e as Leis nºs 6.019, de 3 de janeiro de 1974, 8.036, de 11 de maio de 1990, e 8.212, de 24 de julho de 1991, a fim de adequar a legislação às novas relações de trabalho.",
+    "dataApresentacao": "2016-12-23T16:38"
+  }
+}

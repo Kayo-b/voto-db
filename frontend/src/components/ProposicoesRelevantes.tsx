@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
 interface Proposicao {
+  id?: number;
   tipo: string;
   numero: string;
   titulo: string;
@@ -24,29 +25,134 @@ const ProposicoesRelevantes: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [filtroRelevancia, setFiltroRelevancia] = useState<string>('todas');
+  
+  // Form states
+  const [showForm, setShowForm] = useState<boolean>(false);
+  const [formCodigo, setFormCodigo] = useState<string>('');
+  const [formTitulo, setFormTitulo] = useState<string>('');
+  const [formRelevancia, setFormRelevancia] = useState<string>('média');
+  const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
+  const [formSuccess, setFormSuccess] = useState<string>('');
+  const [validationInfo, setValidationInfo] = useState<any>(null);
+
+  const fetchProposicoes = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:8001/proposicoes/relevantes');
+      const result = await response.json();
+      
+      if (result.success && result.data.votacoes_historicas) {
+        setProposicoes(result.data.votacoes_historicas);
+      } else {
+        setError('Erro ao carregar proposições');
+      }
+    } catch (err) {
+      setError('Erro na conexão com a API');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProposicoes = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:8001/proposicoes/relevantes');
-        const result = await response.json();
-        
-        if (result.success && result.data.votacoes_historicas) {
-          setProposicoes(result.data.votacoes_historicas);
-        } else {
-          setError('Erro ao carregar proposições');
-        }
-      } catch (err) {
-        setError('Erro na conexão com a API');
-        console.error('Erro:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProposicoes();
   }, []);
+
+  const handleValidate = async () => {
+    if (!formCodigo.trim()) {
+      setFormError('Digite o código da proposição (ex: PL 6787/2016)');
+      return;
+    }
+
+    setIsValidating(true);
+    setFormError('');
+    setValidationInfo(null);
+
+    try {
+      const result = await api.validateProposicao(formCodigo);
+      
+      if (result.success) {
+        setValidationInfo(result.data);
+        setFormError('');
+        if (result.data.titulo && !formTitulo) {
+          setFormTitulo(result.data.titulo);
+        }
+      } else {
+        setFormError(result.error || 'Proposição inválida');
+        setValidationInfo(null);
+      }
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Erro ao validar proposição');
+      setValidationInfo(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formCodigo.trim()) {
+      setFormError('Digite o código da proposição');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError('');
+    setFormSuccess('');
+
+    try {
+      const result = await api.addProposicaoRelevante(
+        formCodigo,
+        formTitulo || undefined,
+        formRelevancia
+      );
+      
+      if (result.success) {
+        setFormSuccess('Proposição adicionada com sucesso!');
+        setFormCodigo('');
+        setFormTitulo('');
+        setFormRelevancia('média');
+        setValidationInfo(null);
+        
+        // Refresh the list
+        await fetchProposicoes();
+        
+        // Close form after 2 seconds
+        setTimeout(() => {
+          setShowForm(false);
+          setFormSuccess('');
+        }, 2000);
+      } else {
+        setFormError(result.error || 'Erro ao adicionar proposição');
+      }
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Erro ao adicionar proposição');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Tem certeza que deseja remover esta proposição?')) {
+      return;
+    }
+
+    try {
+      const result = await api.deleteProposicaoRelevante(id);
+      
+      if (result.success) {
+        await fetchProposicoes();
+      } else {
+        alert('Erro ao remover proposição');
+      }
+    } catch (err) {
+      alert('Erro ao remover proposição');
+      console.error('Erro:', err);
+    }
+  };
 
   const proposicoesFiltradas = proposicoes.filter(prop => 
     filtroRelevancia === 'todas' || prop.relevancia === filtroRelevancia
@@ -100,12 +206,137 @@ const ProposicoesRelevantes: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Proposições Relevantes</h1>
-        <p className="text-gray-600">
-          Análise de {proposicoes.length} proposições de alta relevância social e política
-        </p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Proposições Relevantes</h1>
+          <p className="text-gray-600">
+            Análise de {proposicoes.length} proposições de alta relevância social e política
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
+          {showForm ? 'Cancelar' : '+ Adicionar Proposição'}
+        </button>
       </div>
+
+      {/* Form */}
+      {showForm && (
+        <div className="mb-6 bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <h2 className="text-xl font-semibold mb-4">Adicionar Nova Proposição</h2>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Código da Proposição *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formCodigo}
+                    onChange={(e) => setFormCodigo(e.target.value)}
+                    placeholder="Ex: PL 6787/2016"
+                    className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleValidate}
+                    disabled={isValidating}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-medium transition-colors disabled:bg-gray-400"
+                  >
+                    {isValidating ? 'Validando...' : 'Validar'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Digite o tipo e número da proposição (ex: PL 1234/2020, PEC 45/2019)
+                </p>
+              </div>
+
+              {validationInfo && (
+                <div className="bg-green-50 border border-green-200 rounded p-4">
+                  <p className="text-green-800 font-medium mb-2">✓ Proposição válida encontrada!</p>
+                  <p className="text-sm text-gray-700 mb-1">
+                    <strong>Título:</strong> {validationInfo.titulo}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <strong>Votações Nominais:</strong> {validationInfo.total_votacoes_nominais}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Título (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formTitulo}
+                  onChange={(e) => setFormTitulo(e.target.value)}
+                  placeholder="Título personalizado da proposição"
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Deixe em branco para usar o título da API
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Relevância
+                </label>
+                <select
+                  value={formRelevancia}
+                  onChange={(e) => setFormRelevancia(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="alta">Alta</option>
+                  <option value="média">Média</option>
+                  <option value="baixa">Baixa</option>
+                </select>
+              </div>
+
+              {formError && (
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                  <p className="text-red-800 text-sm">{formError}</p>
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="bg-green-50 border border-green-200 rounded p-3">
+                  <p className="text-green-800 text-sm">{formSuccess}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !validationInfo}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-medium transition-colors disabled:bg-blue-300"
+                >
+                  {isSubmitting ? 'Adicionando...' : 'Adicionar Proposição'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setFormCodigo('');
+                    setFormTitulo('');
+                    setFormRelevancia('média');
+                    setFormError('');
+                    setFormSuccess('');
+                    setValidationInfo(null);
+                  }}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-2 rounded font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="mb-6">
@@ -128,7 +359,7 @@ const ProposicoesRelevantes: React.FC = () => {
       <div className="space-y-4">
         {proposicoesFiltradas.map((proposicao, index) => (
           <div
-            key={index}
+            key={proposicao.id || index}
             className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow bg-white"
           >
             <div className="flex justify-between items-start mb-3">
@@ -158,6 +389,17 @@ const ProposicoesRelevantes: React.FC = () => {
                   </p>
                 )}
               </div>
+              {proposicao.id && (
+                <button
+                  onClick={() => handleDelete(proposicao.id!)}
+                  className="ml-4 text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded transition-colors"
+                  title="Remover proposição"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         ))}
