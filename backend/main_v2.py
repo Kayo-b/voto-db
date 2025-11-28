@@ -519,15 +519,43 @@ async def get_votacoes_proposicao(proposicao_id: int):
 
 @app.get("/votacoes/{votacao_id}/votos")
 async def get_votos_votacao(votacao_id: str):
+    """
+    Busca os votos individuais de uma votação nominal.
+    """
     try:
-        votos = analisador.buscar_votos_votacao(votacao_id)
+        url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
+        
+        print(f"Buscando votos da votação: {url}")
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        votos_raw = data.get("dados", [])
+        print(f"Total de votos encontrados: {len(votos_raw)}")
+        
+        # Formatar votos
+        votos_formatados = []
+        for voto in votos_raw:
+            deputado_info = voto.get("deputado_", {})
+            tipo_voto = voto.get("tipoVoto", "")
+            
+            votos_formatados.append({
+                "deputado": {
+                    "id": deputado_info.get("id"),
+                    "nome": deputado_info.get("nome"),
+                    "siglaPartido": deputado_info.get("siglaPartido"),
+                    "siglaUf": deputado_info.get("siglaUf")
+                },
+                "voto": tipo_voto
+            })
+        
         return {
             "success": True,
-            "data": votos,
-            "total": len(votos),
-            "estatisticas": analisador._calcular_estatisticas_votacao(votos)
+            "data": votos_formatados,
+            "total": len(votos_formatados)
         }
     except Exception as e:
+        print(f"Erro ao buscar votos: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votos: {str(e)}")
 
 @app.get("/deputados/{deputado_id}/analise")
@@ -1061,6 +1089,143 @@ async def delete_proposicao_relevante(proposicao_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao remover proposição: {str(e)}")
+
+@app.get("/votacoes/recentes")
+async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais"):
+    """
+    Busca votações recentes dos últimos N dias.
+    
+    Args:
+        dias: Número de dias para buscar (1 para 24h, 7 para semana)
+        tipo: 'nominais' ou 'urgencia'
+    """
+    try:
+        from datetime import timedelta
+        
+        data_inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+        data_fim = datetime.now().strftime("%Y-%m-%d")
+        
+        # Buscar votações da API da Câmara
+        url = f"{CAMARA_BASE_URL}/votacoes"
+        params = {
+            "dataInicio": data_inicio,
+            "dataFim": data_fim,
+            "ordem": "DESC",
+            "ordenarPor": "dataHoraRegistro",
+            "itens": 50  # Reduzido para 50
+        }
+        
+        print(f"Buscando votações: {url} - Params: {params}")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        votacoes = data.get("dados", [])
+        print(f"Total de votações encontradas: {len(votacoes)}")
+        
+        if not votacoes:
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "periodo": f"Últimos {dias} dia(s)",
+                "tipo": tipo,
+                "debug": {
+                    "data_inicio": data_inicio,
+                    "data_fim": data_fim,
+                    "votacoes_api": len(votacoes)
+                }
+            }
+        
+        votacoes_filtradas = []
+        
+        # Processar apenas as primeiras 20 para evitar timeout
+        for i, votacao in enumerate(votacoes[:20]):
+            votacao_id = votacao.get("id")
+            print(f"Processando votação {i+1}/20: {votacao_id}")
+            
+            try:
+                # Buscar detalhes da votação
+                detalhes_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}"
+                det_response = requests.get(detalhes_url, timeout=5)
+                
+                if det_response.status_code != 200:
+                    continue
+                    
+                detalhes = det_response.json().get("dados", {})
+                proposicoes_afetadas = detalhes.get("proposicoesAfetadas", [])
+                
+                if tipo == "nominais":
+                    # Considerar como nominal se tiver proposição associada
+                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
+                        # Pegar a primeira proposição afetada
+                        proposicao_principal = proposicoes_afetadas[0]
+                        
+                        votacao_completa = {
+                            **votacao,
+                            **detalhes,
+                            "proposicao": {
+                                "id": proposicao_principal.get("codProposicao"),
+                                "siglaTipo": proposicao_principal.get("codTipo"),
+                                "numero": proposicao_principal.get("numero"),
+                                "ano": proposicao_principal.get("ano"),
+                                "ementa": proposicao_principal.get("ementa", "")
+                            }
+                        }
+                        votacoes_filtradas.append(votacao_completa)
+                        print(f"  ✓ Votação nominal encontrada: {votacao_id}")
+                
+                elif tipo == "urgencia":
+                    # Para urgência, verificar a descrição
+                    descricao = (votacao.get("descricao", "") + " " + detalhes.get("descricao", "")).lower()
+                    ultima_desc = detalhes.get("descUltimaAberturaVotacao", "").lower()
+                    
+                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
+                        if ("urgência" in descricao or "urgencia" in descricao or 
+                            "urgência" in ultima_desc or "urgencia" in ultima_desc):
+                            proposicao_principal = proposicoes_afetadas[0]
+                            
+                            votacao_completa = {
+                                **votacao,
+                                **detalhes,
+                                "proposicao": {
+                                    "id": proposicao_principal.get("codProposicao"),
+                                    "siglaTipo": proposicao_principal.get("codTipo"),
+                                    "numero": proposicao_principal.get("numero"),
+                                    "ano": proposicao_principal.get("ano"),
+                                    "ementa": proposicao_principal.get("ementa", "")
+                                },
+                                "regimeUrgencia": True
+                            }
+                            votacoes_filtradas.append(votacao_completa)
+                            print(f"  ✓ Votação de urgência encontrada: {votacao_id}")
+            
+            except Exception as e:
+                print(f"  ✗ Erro ao processar votação {votacao_id}: {e}")
+                continue
+        
+        print(f"Total filtrado: {len(votacoes_filtradas)} votações")
+        
+        return {
+            "success": True,
+            "data": votacoes_filtradas,
+            "total": len(votacoes_filtradas),
+            "periodo": f"Últimos {dias} dia(s)",
+            "tipo": tipo,
+            "debug": {
+                "data_inicio": data_inicio,
+                "data_fim": data_fim,
+                "votacoes_api": len(votacoes),
+                "processadas": min(20, len(votacoes)),
+                "filtradas": len(votacoes_filtradas)
+            }
+        }
+        
+    except Exception as e:
+        print(f"Erro ao buscar votações recentes: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar votações: {str(e)}")
 
 @app.get("/health")
 async def health_check():

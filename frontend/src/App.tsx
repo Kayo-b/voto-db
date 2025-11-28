@@ -3,10 +3,11 @@ import DeputadoSearch from './components/DeputadoSearch';
 import DeputadoDetails from './components/DeputadoDetails';
 import ProposicoesRelevantes from './components/ProposicoesRelevantes';
 import AnaliseAvancada from './components/AnaliseAvancada';
+import VotacoesRecentes from './components/VotacoesRecentes';
 import { Deputado } from './types/api';
 import './App.css';
 
-type ViewType = 'search' | 'proposicoes' | 'analise' | 'details';
+type ViewType = 'search' | 'proposicoes' | 'analise' | 'votacoes' | 'details';
 
 function App(): React.ReactElement {
   const [currentView, setCurrentView] = useState<ViewType>('search');
@@ -33,6 +34,8 @@ function App(): React.ReactElement {
         return <ProposicoesRelevantes />;
       case 'analise':
         return <AnaliseAvancada deputadoId={selectedDeputado?.id} />;
+      case 'votacoes':
+        return <VotacoesRecentes />;
       case 'details':
         return selectedDeputado ? (
           <DeputadoDetails 
@@ -92,6 +95,16 @@ function App(): React.ReactElement {
               }`}
             >
               Análise Avançada
+            </button>
+            <button
+              onClick={() => handleNavigation('votacoes')}
+              className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                currentView === 'votacoes'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Votações Recentes
             </button>
           </div>
         </div>

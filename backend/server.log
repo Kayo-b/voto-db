@@ -1,29 +1,68 @@
-nohup: ignoring input
-WARNING:__main__:Redis não disponível - cache de API desabilitado
-/home/kxyx/projects/voto-db/backend/main_db.py:86: DeprecationWarning: 
-        on_event is deprecated, use lifespan event handlers instead.
-
-        Read more about it in the
-        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-        
-  @app.on_event("startup")
-INFO:     Started server process [23620]
+INFO:     Started server process [68352]
 INFO:     Waiting for application startup.
-INFO:database.connection:Database connection test successful
-INFO:__main__:Database connection successful
-INFO:database.connection:Database tables created successfully
-INFO:database.connection:Database initialized successfully
-INFO:__main__:Database initialized
 INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-Database integration enabled
-INFO:     127.0.0.1:35748 - "GET /deputados?nome=nikolas HTTP/1.1" 200 OK
-INFO:__main__:Background update: Fetching deputados from API (nome=nikolas, partido=None, uf=None)
-INFO:__main__:Background update completed: 1 deputados updated
-INFO:__main__:Getting voting history from database for deputy 209787
-INFO:__main__:No votes in database for deputy 209787, trying API fallback
-INFO:     127.0.0.1:55942 - "GET /deputados/209787/votacoes?limit=5 HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [23620]
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+Redis não disponível - cache desabilitado
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2524984-37/votos
+Total de votos encontrados: 404
+INFO:     127.0.0.1:55960 - "GET /votacoes/2524984-37/votos HTTP/1.1" 200 OK
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2524984-37/votos
+Total de votos encontrados: 404
+INFO:     127.0.0.1:48414 - "GET /votacoes/2524984-37/votos HTTP/1.1" 200 OK
+Buscando votações: https://dadosabertos.camara.leg.br/api/v2/votacoes - Params: {'dataInicio': '2025-11-21', 'dataFim': '2025-11-28', 'ordem': 'DESC', 'ordenarPor': 'dataHoraRegistro', 'itens': 50}
+Total de votações encontradas: 50
+Processando votação 1/20: 2500526-54
+  ✓ Votação nominal encontrada: 2500526-54
+Processando votação 2/20: 2500526-52
+  ✓ Votação nominal encontrada: 2500526-52
+Processando votação 3/20: 2524984-39
+  ✓ Votação nominal encontrada: 2524984-39
+Processando votação 4/20: 2524984-37
+  ✓ Votação nominal encontrada: 2524984-37
+Processando votação 5/20: 2524984-33
+  ✓ Votação nominal encontrada: 2524984-33
+Processando votação 6/20: 2524984-25
+  ✓ Votação nominal encontrada: 2524984-25
+Processando votação 7/20: 2164336-114
+  ✓ Votação nominal encontrada: 2164336-114
+Processando votação 8/20: 2164336-110
+  ✓ Votação nominal encontrada: 2164336-110
+Processando votação 9/20: 2237596-95
+  ✓ Votação nominal encontrada: 2237596-95
+Processando votação 10/20: 2237596-92
+  ✓ Votação nominal encontrada: 2237596-92
+Processando votação 11/20: 2555110-47
+  ✓ Votação nominal encontrada: 2555110-47
+Processando votação 12/20: 2555110-45
+  ✓ Votação nominal encontrada: 2555110-45
+Processando votação 13/20: 2555110-39
+  ✓ Votação nominal encontrada: 2555110-39
+Processando votação 14/20: 2555110-36
+  ✓ Votação nominal encontrada: 2555110-36
+Processando votação 15/20: 2547365-23
+  ✓ Votação nominal encontrada: 2547365-23
+Processando votação 16/20: 2485053-17
+  ✓ Votação nominal encontrada: 2485053-17
+Processando votação 17/20: 2506989-19
+  ✓ Votação nominal encontrada: 2506989-19
+Processando votação 18/20: 2237596-85
+  ✓ Votação nominal encontrada: 2237596-85
+Processando votação 19/20: 2237596-84
+  ✓ Votação nominal encontrada: 2237596-84
+Processando votação 20/20: 2237596-83
+  ✓ Votação nominal encontrada: 2237596-83
+Total filtrado: 20 votações
+INFO:     127.0.0.1:41758 - "GET /votacoes/recentes?dias=7&tipo=nominais HTTP/1.1" 200 OK
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2500526-54/votos
+Total de votos encontrados: 0
+INFO:     127.0.0.1:58036 - "GET /votacoes/2500526-54/votos HTTP/1.1" 200 OK
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2500526-52/votos
+Total de votos encontrados: 0
+INFO:     127.0.0.1:58052 - "GET /votacoes/2500526-52/votos HTTP/1.1" 200 OK
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2524984-37/votos
+Total de votos encontrados: 404
+INFO:     127.0.0.1:35304 - "GET /votacoes/2524984-37/votos HTTP/1.1" 200 OK
+Buscando votos da votação: https://dadosabertos.camara.leg.br/api/v2/votacoes/2524984-37/votos
+Total de votos encontrados: 404
+INFO:     127.0.0.1:39432 - "GET /votacoes/2524984-37/votos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39434 - "GET /favicon.ico HTTP/1.1" 404 Not Found

@@ -5,7 +5,7 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
 const apiClient = axios.create({
   baseURL: API_BASE,
-  timeout: 30000, // Increased timeout for analysis operations
+  timeout: 60000, // 60 seconds for votacoes recentes
 });
 
 export const api = {
@@ -114,6 +114,26 @@ export const api = {
         success: false,
         message: 'Erro ao conectar com a API'
       };
+    }
+  },
+
+  buscarVotacoesRecentes: async (dias: number, tipo: 'urgencia' | 'nominais') => {
+    try {
+      const response = await apiClient.get(`/votacoes/recentes?dias=${dias}&tipo=${tipo}`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar votações recentes:', error);
+      throw error;
+    }
+  },
+
+  buscarVotosVotacao: async (votacaoId: string) => {
+    try {
+      const response = await apiClient.get(`/votacoes/${votacaoId}/votos`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar votos da votação:', error);
+      throw error;
     }
   }
 };
