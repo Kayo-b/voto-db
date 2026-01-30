@@ -518,27 +518,60 @@ async def get_votacoes_proposicao(proposicao_id: int):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votações: {str(e)}")
 
 @app.get("/votacoes/{votacao_id}/votos")
-async def get_votos_votacao(votacao_id: str):
+async def get_votos_votacao(votacao_id: str, db: Session = Depends(get_database)):
     """
     Busca os votos individuais de uma votação nominal.
+    First checks DB cache, then fetches from API if not found.
     """
+    from database.recent_votacoes_service import (
+        has_stored_votos, get_stored_votos, store_votos_for_votacao,
+        get_votacao_by_api_id, store_votacao_from_api
+    )
+
     try:
+        # STEP 1: Check if we have cached votes in database
+        if has_stored_votos(votacao_id):
+            print(f"DB Hit: Found cached votes for votacao {votacao_id}")
+            votos_cached = get_stored_votos(votacao_id)
+            return {
+                "success": True,
+                "data": votos_cached,
+                "total": len(votos_cached),
+                "source": "db"
+            }
+
+        # STEP 2: Fetch from API
+        print(f"DB Miss: Fetching votes for votacao {votacao_id} from API")
         url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
-        
+
         print(f"Buscando votos da votação: {url}")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        
+
         votos_raw = data.get("dados", [])
         print(f"Total de votos encontrados: {len(votos_raw)}")
-        
-        # Formatar votos
+
+        # STEP 3: Store in database
+        # First ensure the votacao exists
+        if not get_votacao_by_api_id(votacao_id):
+            # Create a minimal votacao record
+            store_votacao_from_api({
+                "id": votacao_id,
+                "dataHoraRegistro": datetime.now().isoformat(),
+                "tipo_votacao": "nominal"
+            })
+
+        # Store the votes
+        store_result = store_votos_for_votacao(votacao_id, votos_raw)
+        print(f"DB Store: {store_result['votos_stored']} votes stored, {store_result['deputados_created']} deputies created")
+
+        # STEP 4: Format and return
         votos_formatados = []
         for voto in votos_raw:
             deputado_info = voto.get("deputado_", {})
             tipo_voto = voto.get("tipoVoto", "")
-            
+
             votos_formatados.append({
                 "deputado": {
                     "id": deputado_info.get("id"),
@@ -548,11 +581,12 @@ async def get_votos_votacao(votacao_id: str):
                 },
                 "voto": tipo_voto
             })
-        
+
         return {
             "success": True,
             "data": votos_formatados,
-            "total": len(votos_formatados)
+            "total": len(votos_formatados),
+            "source": "api"
         }
     except Exception as e:
         print(f"Erro ao buscar votos: {e}")
@@ -887,6 +921,35 @@ async def analisar_perfil_deputado_completa(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na análise completa: {str(e)}")
 
+@app.get("/deputados/{deputado_id}/votos-recentes")
+async def get_deputado_votos_recentes(
+    deputado_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_database)
+):
+    """
+    Get deputy's votes from stored recent votacoes.
+    Returns votes that have been cached from the 'Votacoes Recentes' feature.
+    """
+    from database.recent_votacoes_service import get_deputado_stored_votes
+
+    try:
+        votos = get_deputado_stored_votes(deputado_id, limit)
+
+        return {
+            "success": True,
+            "data": votos,
+            "total": len(votos),
+            "deputado_id": deputado_id
+        }
+    except Exception as e:
+        print(f"Erro ao buscar votos recentes do deputado {deputado_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao buscar votos recentes: {str(e)}"
+        )
+
+
 @app.get("/cache/stats")
 async def get_cache_stats():
     """Get cache statistics"""
@@ -1091,141 +1154,365 @@ async def delete_proposicao_relevante(proposicao_id: int):
         raise HTTPException(status_code=500, detail=f"Erro ao remover proposição: {str(e)}")
 
 @app.get("/votacoes/recentes")
-async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais"):
+async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Session = Depends(get_database)):
     """
-    Busca votações recentes dos últimos N dias.
-    
+    Busca votações recentes - primeiro do banco de dados, depois da API.
+    Combina resultados e armazena novos dados no DB para crescimento incremental.
+    Para votações nominais, também busca e armazena os votos individuais.
+
     Args:
         dias: Número de dias para buscar (1 para 24h, 7 para semana)
-        tipo: 'nominais' ou 'urgencia'
+        tipo: 'nominais', 'urgencia', ou 'todas'
     """
+    from database.recent_votacoes_service import (
+        store_votacao_from_api, get_recent_votacoes_from_db, get_votacao_by_api_id,
+        store_votos_for_votacao, has_stored_votos
+    )
+
     try:
         from datetime import timedelta
-        
+
         data_inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
         data_fim = datetime.now().strftime("%Y-%m-%d")
-        
-        # Buscar votações da API da Câmara
+
+        # STEP 1: Get existing votações from database
+        print(f"STEP 1: Buscando votações existentes no banco de dados...")
+        db_votacoes = get_recent_votacoes_from_db(tipo=tipo, limit=100)
+        db_votacoes_ids = {v.get("id") for v in db_votacoes}
+        print(f"  Encontradas {len(db_votacoes)} votações no banco de dados")
+
+        # STEP 2: Fetch from government API
+        print(f"STEP 2: Buscando votações da API da Câmara...")
         url = f"{CAMARA_BASE_URL}/votacoes"
         params = {
             "dataInicio": data_inicio,
             "dataFim": data_fim,
             "ordem": "DESC",
             "ordenarPor": "dataHoraRegistro",
-            "itens": 50  # Reduzido para 50
+            "itens": 50
         }
-        
-        print(f"Buscando votações: {url} - Params: {params}")
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        votacoes = data.get("dados", [])
-        print(f"Total de votações encontradas: {len(votacoes)}")
-        
-        if not votacoes:
-            return {
-                "success": True,
-                "data": [],
-                "total": 0,
-                "periodo": f"Últimos {dias} dia(s)",
-                "tipo": tipo,
-                "debug": {
-                    "data_inicio": data_inicio,
-                    "data_fim": data_fim,
-                    "votacoes_api": len(votacoes)
-                }
-            }
-        
-        votacoes_filtradas = []
-        
-        # Processar apenas as primeiras 20 para evitar timeout
-        for i, votacao in enumerate(votacoes[:20]):
-            votacao_id = votacao.get("id")
-            print(f"Processando votação {i+1}/20: {votacao_id}")
-            
-            try:
-                # Buscar detalhes da votação
-                detalhes_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}"
-                det_response = requests.get(detalhes_url, timeout=5)
-                
-                if det_response.status_code != 200:
+
+        print(f"  URL: {url} - Params: {params}")
+        api_votacoes = []
+        new_votacoes_stored = 0
+
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            raw_votacoes = data.get("dados", [])
+            print(f"  Total de votações da API: {len(raw_votacoes)}")
+
+            # Process API votações
+            for i, votacao in enumerate(raw_votacoes[:30]):  # Process up to 30
+                votacao_id = str(votacao.get("id"))
+
+                # Skip if already in DB results
+                if votacao_id in db_votacoes_ids:
+                    print(f"  [{i+1}] {votacao_id} - Já existe no DB, pulando")
                     continue
-                    
-                detalhes = det_response.json().get("dados", {})
-                proposicoes_afetadas = detalhes.get("proposicoesAfetadas", [])
-                
-                if tipo == "nominais":
-                    # Considerar como nominal se tiver proposição associada
+
+                try:
+                    # Fetch details
+                    detalhes_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}"
+                    det_response = requests.get(detalhes_url, timeout=5)
+
+                    if det_response.status_code != 200:
+                        continue
+
+                    detalhes = det_response.json().get("dados", {})
+                    proposicoes_afetadas = detalhes.get("proposicoesAfetadas", [])
+
+                    # Determine vote type
+                    descricao = ((votacao.get("descricao") or "") + " " + (detalhes.get("descricao") or "")).lower()
+                    ultima_desc = (detalhes.get("descUltimaAberturaVotacao") or "").lower()
+                    is_urgencia = ("urgência" in descricao or "urgencia" in descricao or
+                                   "urgência" in ultima_desc or "urgencia" in ultima_desc)
+                    tipo_votacao = "urgencia" if is_urgencia else "nominal" if proposicoes_afetadas else "simbolica"
+
+                    # Filter by requested type
+                    if tipo == "nominais" and not proposicoes_afetadas:
+                        continue
+                    if tipo == "urgencia" and not is_urgencia:
+                        continue
+
+                    # Build votacao object
+                    proposicao_data = None
                     if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
-                        # Pegar a primeira proposição afetada
                         proposicao_principal = proposicoes_afetadas[0]
-                        
-                        votacao_completa = {
-                            **votacao,
-                            **detalhes,
-                            "proposicao": {
-                                "id": proposicao_principal.get("codProposicao"),
-                                "siglaTipo": proposicao_principal.get("codTipo"),
-                                "numero": proposicao_principal.get("numero"),
-                                "ano": proposicao_principal.get("ano"),
-                                "ementa": proposicao_principal.get("ementa", "")
-                            }
+                        proposicao_data = {
+                            "id": proposicao_principal.get("id"),
+                            "siglaTipo": proposicao_principal.get("siglaTipo"),
+                            "numero": proposicao_principal.get("numero"),
+                            "ano": proposicao_principal.get("ano"),
+                            "ementa": proposicao_principal.get("ementa", "")
                         }
-                        votacoes_filtradas.append(votacao_completa)
-                        print(f"  ✓ Votação nominal encontrada: {votacao_id}")
-                
-                elif tipo == "urgencia":
-                    # Para urgência, verificar a descrição
-                    descricao = (votacao.get("descricao", "") + " " + detalhes.get("descricao", "")).lower()
-                    ultima_desc = detalhes.get("descUltimaAberturaVotacao", "").lower()
-                    
-                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
-                        if ("urgência" in descricao or "urgencia" in descricao or 
-                            "urgência" in ultima_desc or "urgencia" in ultima_desc):
-                            proposicao_principal = proposicoes_afetadas[0]
-                            
-                            votacao_completa = {
-                                **votacao,
-                                **detalhes,
-                                "proposicao": {
-                                    "id": proposicao_principal.get("codProposicao"),
-                                    "siglaTipo": proposicao_principal.get("codTipo"),
-                                    "numero": proposicao_principal.get("numero"),
-                                    "ano": proposicao_principal.get("ano"),
-                                    "ementa": proposicao_principal.get("ementa", "")
-                                },
-                                "regimeUrgencia": True
-                            }
-                            votacoes_filtradas.append(votacao_completa)
-                            print(f"  ✓ Votação de urgência encontrada: {votacao_id}")
-            
-            except Exception as e:
-                print(f"  ✗ Erro ao processar votação {votacao_id}: {e}")
-                continue
-        
-        print(f"Total filtrado: {len(votacoes_filtradas)} votações")
-        
+
+                    # Include votação (with or without proposição for "todas" type)
+                    if proposicoes_afetadas or tipo == "todas":
+                        votacao_completa = {
+                            "id": votacao_id,
+                            "data": votacao.get("data"),
+                            "dataHoraRegistro": votacao.get("dataHoraRegistro"),
+                            "siglaOrgao": votacao.get("siglaOrgao") or detalhes.get("siglaOrgao", ""),
+                            "descricao": detalhes.get("descricao") or votacao.get("descricao", ""),
+                            "aprovacao": detalhes.get("aprovacao"),
+                            "proposicao": proposicao_data,
+                            "regimeUrgencia": is_urgencia,
+                            "tipo_votacao": tipo_votacao,
+                            "source": "api"
+                        }
+                        api_votacoes.append(votacao_completa)
+                        print(f"  [{i+1}] ✓ Nova votação da API ({tipo_votacao}): {votacao_id}")
+
+                        # Store in database
+                        try:
+                            store_votacao_from_api({
+                                "id": votacao_id,
+                                "dataHoraRegistro": votacao.get("dataHoraRegistro", votacao.get("data")),
+                                "descricao": detalhes.get("descricao", votacao.get("descricao", "")),
+                                "siglaOrgao": votacao.get("siglaOrgao", detalhes.get("siglaOrgao", "")),
+                                "resultado": detalhes.get("descResultado", ""),
+                                "aprovacao": detalhes.get("aprovacao"),
+                                "tipo_votacao": tipo_votacao,
+                                "proposicao": proposicao_data
+                            })
+                            new_votacoes_stored += 1
+
+                            # For nominal votações (or any with potential votes), fetch and store individual votes
+                            if not has_stored_votos(votacao_id):
+                                try:
+                                    votos_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
+                                    votos_response = requests.get(votos_url, timeout=10)
+                                    if votos_response.status_code == 200:
+                                        votos_data = votos_response.json().get("dados", [])
+                                        if votos_data:
+                                            votos_result = store_votos_for_votacao(votacao_id, votos_data)
+                                            print(f"    → Votos armazenados: {votos_result['votos_stored']} votos, {votos_result['deputados_created']} deputados criados")
+                                except Exception as votos_error:
+                                    print(f"    Warning: Could not fetch/store votes: {votos_error}")
+
+                        except Exception as store_error:
+                            print(f"    Warning: Could not store: {store_error}")
+
+                except Exception as e:
+                    print(f"  [{i+1}] ✗ Erro ao processar {votacao_id}: {e}")
+                    continue
+
+        except Exception as api_error:
+            print(f"  Erro ao buscar da API: {api_error}")
+
+        # STEP 3: Fetch missing votes for DB votações that don't have them yet
+        print(f"STEP 3: Verificando votos faltantes para votações do banco...")
+        votos_fetched_for_existing = 0
+        for db_v in db_votacoes:
+            db_votacao_id = db_v.get("id")
+            votos_count = db_v.get("votos_count", 0)
+            tipo_vot = db_v.get("tipo_votacao", "")
+
+            # Only fetch for nominal votações without stored votes
+            if tipo_vot == "nominal" and votos_count == 0 and db_votacao_id:
+                try:
+                    votos_url = f"{CAMARA_BASE_URL}/votacoes/{db_votacao_id}/votos"
+                    votos_response = requests.get(votos_url, timeout=10)
+                    if votos_response.status_code == 200:
+                        votos_data = votos_response.json().get("dados", [])
+                        if votos_data:
+                            votos_result = store_votos_for_votacao(db_votacao_id, votos_data)
+                            db_v["votos_count"] = votos_result["votos_stored"]
+                            votos_fetched_for_existing += 1
+                            print(f"  → Buscados votos para votação existente {db_votacao_id}: {votos_result['votos_stored']} votos")
+                except Exception as e:
+                    print(f"  Warning: Could not fetch votes for existing votacao {db_votacao_id}: {e}")
+
+        if votos_fetched_for_existing > 0:
+            print(f"  Total de votações atualizadas com votos: {votos_fetched_for_existing}")
+
+        # STEP 4: Merge results - DB first, then new API results
+        print(f"STEP 4: Combinando resultados...")
+
+        # Mark DB votacoes with source
+        for v in db_votacoes:
+            v["source"] = "db"
+
+        # Combine: DB votações + new API votações
+        all_votacoes = db_votacoes + api_votacoes
+
+        # Sort by date descending
+        all_votacoes.sort(key=lambda x: x.get("dataHoraRegistro") or x.get("data") or "", reverse=True)
+
+        print(f"  Total combinado: {len(all_votacoes)} ({len(db_votacoes)} do DB + {len(api_votacoes)} novas da API)")
+        print(f"  Novas votações armazenadas: {new_votacoes_stored}")
+        print(f"  Votos buscados para votações existentes: {votos_fetched_for_existing}")
+
         return {
             "success": True,
-            "data": votacoes_filtradas,
-            "total": len(votacoes_filtradas),
+            "data": all_votacoes,
+            "total": len(all_votacoes),
             "periodo": f"Últimos {dias} dia(s)",
             "tipo": tipo,
+            "stats": {
+                "from_db": len(db_votacoes),
+                "from_api": len(api_votacoes),
+                "new_stored": new_votacoes_stored,
+                "votos_updated": votos_fetched_for_existing
+            },
             "debug": {
                 "data_inicio": data_inicio,
-                "data_fim": data_fim,
-                "votacoes_api": len(votacoes),
-                "processadas": min(20, len(votacoes)),
-                "filtradas": len(votacoes_filtradas)
+                "data_fim": data_fim
             }
         }
-        
+
     except Exception as e:
         print(f"Erro ao buscar votações recentes: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votações: {str(e)}")
+
+
+@app.get("/votacoes/recentes/legacy")
+async def buscar_votacoes_recentes_legacy(dias: int = 7, tipo: str = "nominais", db: Session = Depends(get_database)):
+    """Legacy endpoint - API only, kept for reference"""
+    from database.recent_votacoes_service import store_votacao_from_api, store_votos_for_votacao, has_stored_votos
+
+    try:
+        from datetime import timedelta
+
+        data_inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+        data_fim = datetime.now().strftime("%Y-%m-%d")
+
+        url = f"{CAMARA_BASE_URL}/votacoes"
+        params = {
+            "dataInicio": data_inicio,
+            "dataFim": data_fim,
+            "ordem": "DESC",
+            "ordenarPor": "dataHoraRegistro",
+            "itens": 50
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        votacoes = data.get("dados", [])
+
+        if not votacoes:
+            return {"success": True, "data": [], "total": 0}
+
+        votacoes_filtradas = []
+        votacoes_stored = 0
+
+        for i, votacao in enumerate(votacoes[:20]):
+            votacao_id = votacao.get("id")
+
+            try:
+                detalhes_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}"
+                det_response = requests.get(detalhes_url, timeout=5)
+
+                if det_response.status_code != 200:
+                    continue
+
+                detalhes = det_response.json().get("dados", {})
+                proposicoes_afetadas = detalhes.get("proposicoesAfetadas", [])
+
+                descricao = ((votacao.get("descricao") or "") + " " + (detalhes.get("descricao") or "")).lower()
+                ultima_desc = (detalhes.get("descUltimaAberturaVotacao") or "").lower()
+                is_urgencia = ("urgência" in descricao or "urgencia" in descricao or
+                               "urgência" in ultima_desc or "urgencia" in ultima_desc)
+                tipo_votacao = "urgencia" if is_urgencia else "nominal" if proposicoes_afetadas else "simbolica"
+
+                votacao_completa = None
+
+                if tipo == "todas":
+                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
+                        proposicao_principal = proposicoes_afetadas[0]
+                        votacao_completa = {
+                            **votacao,
+                            **detalhes,
+                            "proposicao": {
+                                "id": proposicao_principal.get("id"),
+                                "siglaTipo": proposicao_principal.get("siglaTipo"),
+                                "numero": proposicao_principal.get("numero"),
+                                "ano": proposicao_principal.get("ano"),
+                                "ementa": proposicao_principal.get("ementa", "")
+                            },
+                            "regimeUrgencia": is_urgencia,
+                            "tipo_votacao": tipo_votacao
+                        }
+
+                elif tipo == "nominais":
+                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0:
+                        proposicao_principal = proposicoes_afetadas[0]
+                        votacao_completa = {
+                            **votacao,
+                            **detalhes,
+                            "proposicao": {
+                                "id": proposicao_principal.get("id"),
+                                "siglaTipo": proposicao_principal.get("siglaTipo"),
+                                "numero": proposicao_principal.get("numero"),
+                                "ano": proposicao_principal.get("ano"),
+                                "ementa": proposicao_principal.get("ementa", "")
+                            },
+                            "tipo_votacao": tipo_votacao
+                        }
+
+                elif tipo == "urgencia":
+                    if proposicoes_afetadas and len(proposicoes_afetadas) > 0 and is_urgencia:
+                        proposicao_principal = proposicoes_afetadas[0]
+                        votacao_completa = {
+                            **votacao,
+                            **detalhes,
+                            "proposicao": {
+                                "id": proposicao_principal.get("id"),
+                                "siglaTipo": proposicao_principal.get("siglaTipo"),
+                                "numero": proposicao_principal.get("numero"),
+                                "ano": proposicao_principal.get("ano"),
+                                "ementa": proposicao_principal.get("ementa", "")
+                            },
+                            "regimeUrgencia": True,
+                            "tipo_votacao": "urgencia"
+                        }
+
+                if votacao_completa:
+                    votacoes_filtradas.append(votacao_completa)
+                    try:
+                        store_votacao_from_api({
+                            "id": votacao_id,
+                            "dataHoraRegistro": votacao.get("dataHoraRegistro", votacao.get("data")),
+                            "descricao": detalhes.get("descricao", votacao.get("descricao", "")),
+                            "siglaOrgao": votacao.get("siglaOrgao", detalhes.get("siglaOrgao", "")),
+                            "resultado": detalhes.get("descResultado", ""),
+                            "aprovacao": detalhes.get("aprovacao"),
+                            "tipo_votacao": tipo_votacao,
+                            "proposicao": votacao_completa.get("proposicao")
+                        })
+                        votacoes_stored += 1
+
+                        # For nominal votações, also fetch and store individual votes
+                        if tipo_votacao == "nominal" and not has_stored_votos(str(votacao_id)):
+                            try:
+                                votos_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
+                                votos_response = requests.get(votos_url, timeout=10)
+                                if votos_response.status_code == 200:
+                                    votos_data = votos_response.json().get("dados", [])
+                                    if votos_data:
+                                        store_votos_for_votacao(str(votacao_id), votos_data)
+                            except:
+                                pass
+                    except:
+                        pass
+
+            except:
+                continue
+
+        return {
+            "success": True,
+            "data": votacoes_filtradas,
+            "total": len(votacoes_filtradas),
+            "stored": votacoes_stored
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():

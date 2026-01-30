@@ -18,6 +18,9 @@ interface Votacao {
   ultimaAberturaVotacao?: {
     descricao: string;
   };
+  source?: 'db' | 'api';
+  tipo_votacao?: string;
+  votos_count?: number;
 }
 
 interface Voto {
@@ -30,28 +33,50 @@ interface Voto {
   voto: string;
 }
 
+interface VotosResponse {
+  success: boolean;
+  data: Voto[];
+  total: number;
+  source?: 'db' | 'api';
+}
+
+interface VotacoesResponse {
+  success: boolean;
+  data: Votacao[];
+  total: number;
+  stats?: {
+    from_db: number;
+    from_api: number;
+    new_stored: number;
+    votos_updated?: number;
+  };
+}
+
 const VotacoesRecentes: React.FC = () => {
   const [periodo, setPeriodo] = useState<'24h' | '7dias'>('24h');
-  const [tipoConsulta, setTipoConsulta] = useState<'urgencia' | 'nominais'>('nominais');
+  const [tipoConsulta, setTipoConsulta] = useState<'urgencia' | 'nominais' | 'todas'>('nominais');
   const [votacoes, setVotacoes] = useState<Votacao[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [votosDetalhados, setVotosDetalhados] = useState<{[key: string]: Voto[]}>({});
   const [loadingVotos, setLoadingVotos] = useState<{[key: string]: boolean}>({});
   const [mostrarVotos, setMostrarVotos] = useState<{[key: string]: boolean}>({});
+  const [votosSource, setVotosSource] = useState<{[key: string]: 'db' | 'api'}>({});
+  const [searchStats, setSearchStats] = useState<{from_db: number; from_api: number; new_stored: number; votos_updated?: number} | null>(null);
 
   const buscarVotacoes = async () => {
     setLoading(true);
     setError('');
-    
+
     try {
       const dias = periodo === '24h' ? 1 : 7;
-      const response = await api.buscarVotacoesRecentes(dias, tipoConsulta);
-      
+      const response: VotacoesResponse = await api.buscarVotacoesRecentes(dias, tipoConsulta);
+
       if (response.success) {
         setVotacoes(response.data || []);
+        setSearchStats(response.stats || null);
       } else {
-        setError(response.message || 'Erro ao buscar votações');
+        setError((response as any).message || 'Erro ao buscar votações');
       }
     } catch (err: any) {
       setError('Erro na conexão com a API');
@@ -69,13 +94,16 @@ const VotacoesRecentes: React.FC = () => {
     }
 
     setLoadingVotos(prev => ({ ...prev, [votacaoId]: true }));
-    
+
     try {
-      const response = await api.buscarVotosVotacao(votacaoId);
-      
+      const response: VotosResponse = await api.buscarVotosVotacao(votacaoId);
+
       if (response.success) {
         setVotosDetalhados(prev => ({ ...prev, [votacaoId]: response.data }));
         setMostrarVotos(prev => ({ ...prev, [votacaoId]: true }));
+        if (response.source) {
+          setVotosSource(prev => ({ ...prev, [votacaoId]: response.source! }));
+        }
       } else {
         alert('Erro ao buscar votos');
       }
@@ -146,11 +174,12 @@ const VotacoesRecentes: React.FC = () => {
             </label>
             <select
               value={tipoConsulta}
-              onChange={(e) => setTipoConsulta(e.target.value as 'urgencia' | 'nominais')}
+              onChange={(e) => setTipoConsulta(e.target.value as 'urgencia' | 'nominais' | 'todas')}
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="nominais">Votações Nominais</option>
               <option value="urgencia">Regime de Urgência</option>
+              <option value="todas">Todas as Votações</option>
             </select>
           </div>
 
@@ -181,12 +210,17 @@ const VotacoesRecentes: React.FC = () => {
 
         {tipoConsulta === 'urgencia' && (
           <p className="text-xs text-gray-500 mt-2">
-            ℹ️ Regime de urgência: proposições que tramitam em caráter prioritário
+            Regime de urgência: proposições que tramitam em caráter prioritário
           </p>
         )}
         {tipoConsulta === 'nominais' && (
           <p className="text-xs text-gray-500 mt-2">
-            ℹ️ Votações nominais: cada deputado registra seu voto individualmente
+            Votações nominais: cada deputado registra seu voto individualmente
+          </p>
+        )}
+        {tipoConsulta === 'todas' && (
+          <p className="text-xs text-gray-500 mt-2">
+            Todas as votações: inclui nominais, urgência e simbólicas
           </p>
         )}
       </div>
@@ -210,9 +244,35 @@ const VotacoesRecentes: React.FC = () => {
       {!loading && votacoes.length > 0 && (
         <div>
           <div className="mb-4 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">
-              {votacoes.length} votação(ões) encontrada(s)
-            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-semibold">
+                {votacoes.length} votação(ões) encontrada(s)
+              </h2>
+              {searchStats && (
+                <div className="flex gap-2">
+                  {searchStats.from_db > 0 && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                      {searchStats.from_db} do banco local
+                    </span>
+                  )}
+                  {searchStats.from_api > 0 && (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                      {searchStats.from_api} novas da API
+                    </span>
+                  )}
+                  {searchStats.new_stored > 0 && (
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                      +{searchStats.new_stored} salvas
+                    </span>
+                  )}
+                  {searchStats.votos_updated !== undefined && searchStats.votos_updated > 0 && (
+                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                      {searchStats.votos_updated} votos atualizados
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -231,6 +291,21 @@ const VotacoesRecentes: React.FC = () => {
                       <span className="text-sm text-gray-500">
                         {formatarData(votacao.dataHoraRegistro || votacao.data)}
                       </span>
+                      {votacao.source === 'db' && (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
+                          Banco Local
+                        </span>
+                      )}
+                      {votacao.source === 'api' && (
+                        <span className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-xs">
+                          Nova
+                        </span>
+                      )}
+                      {votacao.votos_count !== undefined && votacao.votos_count > 0 && (
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded text-xs" title="Votos armazenados no banco local">
+                          {votacao.votos_count} votos
+                        </span>
+                      )}
                     </div>
 
                     {/* Proposição */}
@@ -278,7 +353,7 @@ const VotacoesRecentes: React.FC = () => {
                       {loadingVotos[votacao.id] ? 'Carregando...' : mostrarVotos[votacao.id] ? 'Ocultar Votos' : 'Ver Detalhes'}
                     </button>
                     
-                    {tipoConsulta === 'nominais' && votacao.proposicao && (
+                    {votacao.proposicao && (
                       <button
                         onClick={() => adicionarProposicao(votacao)}
                         className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium transition-colors"
@@ -293,7 +368,19 @@ const VotacoesRecentes: React.FC = () => {
                 {/* Detalhes dos Votos */}
                 {mostrarVotos[votacao.id] && votosDetalhados[votacao.id] && (
                   <div className="mt-4 border-t pt-4">
-                    <h4 className="font-semibold mb-3 text-lg">Detalhes da Votação</h4>
+                    <div className="flex items-center gap-3 mb-3">
+                      <h4 className="font-semibold text-lg">Detalhes da Votação</h4>
+                      {votosSource[votacao.id] === 'db' && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                          Cache local
+                        </span>
+                      )}
+                      {votosSource[votacao.id] === 'api' && (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          API
+                        </span>
+                      )}
+                    </div>
                     
                     {/* Resumo */}
                     <div className="grid grid-cols-4 gap-4 mb-4">

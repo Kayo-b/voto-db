@@ -36,7 +36,7 @@ class Partido(Base):
     __tablename__ = 'partidos'
     
     id = Column(Integer, primary_key=True)
-    sigla = Column(String(10), unique=True, nullable=False, index=True)
+    sigla = Column(String(20), unique=True, nullable=False, index=True)
     nome = Column(String(255))
     uri = Column(String(500))
     created_at = Column(DateTime, default=func.now())
@@ -111,20 +111,30 @@ class Proposicao(Base):
 class Votacao(Base):
     """Voting session for a specific proposal"""
     __tablename__ = 'votacoes'
-    
+
     id = Column(Integer, primary_key=True)
-    proposicao_id = Column(Integer, ForeignKey('proposicoes.id'), nullable=False)
+    api_votacao_id = Column(String(100), unique=True, nullable=True, index=True)  # Chamber API votacao ID
+    proposicao_id = Column(Integer, ForeignKey('proposicoes.id'), nullable=True)  # Made nullable for votacoes without proposicao
     data_votacao = Column(DateTime, nullable=False, index=True)
     descricao = Column(Text)
     resultado = Column(String(50))  # Aprovado, Rejeitado, etc.
-    
+    tipo_votacao = Column(String(50))  # 'nominal', 'urgencia', 'simbolica'
+    sigla_orgao = Column(String(20))   # e.g., 'PLEN'
+    aprovacao = Column(Integer)         # 1=approved, 0=rejected, null=pending
+
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
+
     # Relationships
     proposicao = relationship("Proposicao", back_populates="votacoes")
     votos = relationship("Voto", back_populates="votacao")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_votacao_api_id', 'api_votacao_id'),
+        Index('idx_votacao_tipo', 'tipo_votacao'),
+    )
 
 
 class Voto(Base):

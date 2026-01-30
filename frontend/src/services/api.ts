@@ -117,7 +117,7 @@ export const api = {
     }
   },
 
-  buscarVotacoesRecentes: async (dias: number, tipo: 'urgencia' | 'nominais') => {
+  buscarVotacoesRecentes: async (dias: number, tipo: 'urgencia' | 'nominais' | 'todas') => {
     try {
       const response = await apiClient.get(`/votacoes/recentes?dias=${dias}&tipo=${tipo}`);
       return response.data;
@@ -133,6 +133,16 @@ export const api = {
       return response.data;
     } catch (error) {
       console.error('Erro ao buscar votos da votação:', error);
+      throw error;
+    }
+  },
+
+  getDeputadoVotosRecentes: async (deputadoId: number, limit: number = 20) => {
+    try {
+      const response = await apiClient.get(`/deputados/${deputadoId}/votos-recentes?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar votos recentes do deputado:', error);
       throw error;
     }
   }
