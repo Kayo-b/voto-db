@@ -60,6 +60,36 @@ export const api = {
     }
   },
 
+  getProposicoesMonitoradas: async (params?: {
+    relevancia?: string;
+    somenteEmVotacao?: boolean;
+    limit?: number;
+  }) => {
+    try {
+      const query = new URLSearchParams();
+      if (params?.relevancia) query.set('relevancia', params.relevancia);
+      if (params?.somenteEmVotacao !== undefined) query.set('somente_em_votacao', String(params.somenteEmVotacao));
+      if (params?.limit) query.set('limit', String(params.limit));
+
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const response = await apiClient.get(`/proposicoes/monitoradas${suffix}`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar proposições monitoradas:', error);
+      throw error;
+    }
+  },
+
+  syncProposicoesMonitoradas: async () => {
+    try {
+      const response = await apiClient.post('/proposicoes/monitoradas/sync');
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao sincronizar proposições monitoradas:', error);
+      throw error;
+    }
+  },
+
   validateProposicao: async (codigo: string) => {
     try {
       const response = await apiClient.post('/proposicoes/relevantes/validate', {

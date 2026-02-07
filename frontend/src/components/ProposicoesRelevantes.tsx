@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
+interface ProposicaoStats {
+  total_votacoes: number;
+  votacoes_nominais: number;
+  ultima_votacao?: string | null;
+}
+
 interface Proposicao {
   id?: number;
   tipo: string;
   numero: string;
+  ano?: number;
   titulo: string;
   relevancia: string;
-  impacto: string;
+  ementa?: string;
   status?: string;
-  data_aprovacao?: string;
-}
-
-interface ProposicoesRelevantesData {
-  votacoes_historicas: Proposicao[];
-  metadata: {
-    total_proposicoes: number;
-    periodo: string;
-  };
+  em_votacao?: boolean;
+  stats?: ProposicaoStats;
 }
 
 const ProposicoesRelevantes: React.FC = () => {
@@ -25,7 +25,11 @@ const ProposicoesRelevantes: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [filtroRelevancia, setFiltroRelevancia] = useState<string>('todas');
-  
+  const [filtroEmVotacao, setFiltroEmVotacao] = useState<boolean>(false);
+  const [ultimaSincronizacao, setUltimaSincronizacao] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string>('not_started');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   // Form states
   const [showForm, setShowForm] = useState<boolean>(false);
   const [formCodigo, setFormCodigo] = useState<string>('');
@@ -40,11 +44,12 @@ const ProposicoesRelevantes: React.FC = () => {
   const fetchProposicoes = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8001/proposicoes/relevantes');
-      const result = await response.json();
-      
-      if (result.success && result.data.votacoes_historicas) {
-        setProposicoes(result.data.votacoes_historicas);
+      const result = await api.getProposicoesMonitoradas({ limit: 200 });
+
+      if (result.success && result.data?.proposicoes) {
+        setProposicoes(result.data.proposicoes);
+        setUltimaSincronizacao(result.data.metadata?.ultima_sincronizacao || null);
+        setSyncStatus(result.data.metadata?.status_ultima_sincronizacao || 'unknown');
       } else {
         setError('Erro ao carregar proposições');
       }
@@ -60,6 +65,19 @@ const ProposicoesRelevantes: React.FC = () => {
     fetchProposicoes();
   }, []);
 
+  const handleSyncNow = async () => {
+    try {
+      setIsSyncing(true);
+      await api.syncProposicoesMonitoradas();
+      await fetchProposicoes();
+    } catch (err) {
+      console.error('Erro ao sincronizar:', err);
+      alert('Erro ao sincronizar proposições');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleValidate = async () => {
     if (!formCodigo.trim()) {
       setFormError('Digite o código da proposição (ex: PL 6787/2016)');
@@ -72,7 +90,7 @@ const ProposicoesRelevantes: React.FC = () => {
 
     try {
       const result = await api.validateProposicao(formCodigo);
-      
+
       if (result.success) {
         setValidationInfo(result.data);
         setFormError('');
@@ -93,7 +111,7 @@ const ProposicoesRelevantes: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formCodigo.trim()) {
       setFormError('Digite o código da proposição');
       return;
@@ -109,18 +127,16 @@ const ProposicoesRelevantes: React.FC = () => {
         formTitulo || undefined,
         formRelevancia
       );
-      
+
       if (result.success) {
         setFormSuccess('Proposição adicionada com sucesso!');
         setFormCodigo('');
         setFormTitulo('');
         setFormRelevancia('média');
         setValidationInfo(null);
-        
-        // Refresh the list
+
         await fetchProposicoes();
-        
-        // Close form after 2 seconds
+
         setTimeout(() => {
           setShowForm(false);
           setFormSuccess('');
@@ -142,7 +158,7 @@ const ProposicoesRelevantes: React.FC = () => {
 
     try {
       const result = await api.deleteProposicaoRelevante(id);
-      
+
       if (result.success) {
         await fetchProposicoes();
       } else {
@@ -154,9 +170,11 @@ const ProposicoesRelevantes: React.FC = () => {
     }
   };
 
-  const proposicoesFiltradas = proposicoes.filter(prop => 
-    filtroRelevancia === 'todas' || prop.relevancia === filtroRelevancia
-  );
+  const proposicoesFiltradas = proposicoes.filter((prop) => {
+    const matchesRelevancia = filtroRelevancia === 'todas' || prop.relevancia === filtroRelevancia;
+    const matchesEmVotacao = !filtroEmVotacao || !!prop.em_votacao;
+    return matchesRelevancia && matchesEmVotacao;
+  });
 
   const getRelevanciaColor = (relevancia: string): string => {
     switch (relevancia) {
@@ -173,14 +191,11 @@ const ProposicoesRelevantes: React.FC = () => {
 
   const getStatusColor = (status?: string): string => {
     if (!status) return 'text-gray-600 bg-gray-100';
-    
-    if (status.includes('Aprovado') || status.includes('Lei')) {
-      return 'text-green-600 bg-green-100';
-    } else if (status.includes('tramitação')) {
-      return 'text-blue-600 bg-blue-100';
-    } else {
-      return 'text-gray-600 bg-gray-100';
+
+    if (status.includes('votação')) {
+      return 'text-blue-700 bg-blue-100';
     }
+    return 'text-gray-600 bg-gray-100';
   };
 
   if (loading) {
@@ -188,7 +203,7 @@ const ProposicoesRelevantes: React.FC = () => {
       <div className="p-6">
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando proposições relevantes...</p>
+          <p className="mt-4 text-gray-600">Carregando proposições monitoradas...</p>
         </div>
       </div>
     );
@@ -206,26 +221,37 @@ const ProposicoesRelevantes: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex justify-between items-start">
+      <div className="mb-6 flex justify-between items-start gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Proposições Relevantes</h1>
+          <h1 className="text-3xl font-bold mb-2">Proposições Monitoradas</h1>
           <p className="text-gray-600">
-            Análise de {proposicoes.length} proposições de alta relevância social e política
+            Lista automática com {proposicoes.length} proposições e estatísticas de votação.
+          </p>
+          <p className="text-sm text-gray-500 mt-1">
+            Sync automático a cada 15 minutos. Última sincronização: {ultimaSincronizacao ? new Date(ultimaSincronizacao).toLocaleString('pt-BR') : 'ainda não executada'} ({syncStatus})
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-          {showForm ? 'Cancelar' : '+ Adicionar Proposição'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSyncNow}
+            disabled={isSyncing}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:bg-indigo-300"
+          >
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            {showForm ? 'Cancelar' : '+ Adicionar Proposição'}
+          </button>
+        </div>
       </div>
 
-      {/* Form */}
       {showForm && (
         <div className="mb-6 bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Adicionar Nova Proposição</h2>
-          
+
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>
@@ -249,18 +275,12 @@ const ProposicoesRelevantes: React.FC = () => {
                     {isValidating ? 'Validando...' : 'Validar'}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Digite o tipo e número da proposição (ex: PL 1234/2020, PEC 45/2019)
-                </p>
               </div>
 
               {validationInfo && (
                 <div className="bg-green-50 border border-green-200 rounded p-4">
                   <p className="text-green-800 font-medium mb-2">✓ Proposição válida encontrada!</p>
                   <p className="text-sm text-gray-700 mb-1">
-                    <strong>Título:</strong> {validationInfo.titulo}
-                  </p>
-                  <p className="text-sm text-gray-700">
                     <strong>Votações Nominais:</strong> {validationInfo.total_votacoes_nominais}
                   </p>
                 </div>
@@ -277,9 +297,6 @@ const ProposicoesRelevantes: React.FC = () => {
                   placeholder="Título personalizado da proposição"
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Deixe em branco para usar o título da API
-                </p>
               </div>
 
               <div>
@@ -338,24 +355,32 @@ const ProposicoesRelevantes: React.FC = () => {
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Filtrar por relevância:
+      <div className="mb-6 flex gap-4 items-end">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Filtrar por relevância:</label>
+          <select
+            value={filtroRelevancia}
+            onChange={(e) => setFiltroRelevancia(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="todas">Todas</option>
+            <option value="alta">Alta</option>
+            <option value="média">Média</option>
+            <option value="baixa">Baixa</option>
+          </select>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700 pb-2">
+          <input
+            type="checkbox"
+            checked={filtroEmVotacao}
+            onChange={(e) => setFiltroEmVotacao(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          Somente em votação
         </label>
-        <select
-          value={filtroRelevancia}
-          onChange={(e) => setFiltroRelevancia(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="todas">Todas</option>
-          <option value="alta">Alta</option>
-          <option value="média">Média</option>
-          <option value="baixa">Baixa</option>
-        </select>
       </div>
 
-      {/* Lista de Proposições */}
       <div className="space-y-4">
         {proposicoesFiltradas.map((proposicao, index) => (
           <div
@@ -364,9 +389,9 @@ const ProposicoesRelevantes: React.FC = () => {
           >
             <div className="flex justify-between items-start mb-3">
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <h3 className="text-xl font-semibold">
-                    {proposicao.tipo} {proposicao.numero}
+                    {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
                   </h3>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRelevanciaColor(proposicao.relevancia)}`}>
                     {proposicao.relevancia}
@@ -377,18 +402,29 @@ const ProposicoesRelevantes: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <h4 className="text-lg font-medium text-gray-800 mb-2">
-                  {proposicao.titulo}
-                </h4>
-                <p className="text-gray-600 mb-3">
-                  {proposicao.impacto}
-                </p>
-                {proposicao.data_aprovacao && (
-                  <p className="text-sm text-gray-500">
-                    Aprovado em: {new Date(proposicao.data_aprovacao).toLocaleDateString('pt-BR')}
-                  </p>
-                )}
+                <h4 className="text-lg font-medium text-gray-800 mb-2">{proposicao.titulo}</h4>
+                <p className="text-gray-600 mb-3">{proposicao.ementa || 'Sem ementa disponível.'}</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="bg-gray-50 rounded p-3">
+                    <div className="text-gray-500">Total de votações</div>
+                    <div className="font-semibold text-gray-800">{proposicao.stats?.total_votacoes ?? 0}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded p-3">
+                    <div className="text-gray-500">Votações nominais</div>
+                    <div className="font-semibold text-gray-800">{proposicao.stats?.votacoes_nominais ?? 0}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded p-3">
+                    <div className="text-gray-500">Última votação</div>
+                    <div className="font-semibold text-gray-800">
+                      {proposicao.stats?.ultima_votacao
+                        ? new Date(proposicao.stats.ultima_votacao).toLocaleString('pt-BR')
+                        : 'Sem registro'}
+                    </div>
+                  </div>
+                </div>
               </div>
+
               {proposicao.id && (
                 <button
                   onClick={() => handleDelete(proposicao.id!)}
@@ -407,32 +443,28 @@ const ProposicoesRelevantes: React.FC = () => {
 
       {proposicoesFiltradas.length === 0 && (
         <div className="text-center py-8">
-          <p className="text-gray-500">
-            Nenhuma proposição encontrada com o filtro selecionado.
-          </p>
+          <p className="text-gray-500">Nenhuma proposição encontrada com o filtro selecionado.</p>
         </div>
       )}
 
-            <div className="mt-8 bg-blue-50 p-6 rounded-lg">
+      <div className="mt-8 bg-blue-50 p-6 rounded-lg">
         <h3 className="text-lg font-semibold mb-4">Estatísticas</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {proposicoes.filter(p => p.relevancia === 'alta').length}
-            </div>
+            <div className="text-2xl font-bold text-blue-600">{proposicoes.length}</div>
+            <div className="text-sm text-gray-600">Total Monitoradas</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">{proposicoes.filter((p) => p.relevancia === 'alta').length}</div>
             <div className="text-sm text-gray-600">Alta Relevância</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-600">
-              {proposicoes.filter(p => p.relevancia === 'média').length}
-            </div>
-            <div className="text-sm text-gray-600">Média Relevância</div>
+            <div className="text-2xl font-bold text-indigo-600">{proposicoes.filter((p) => p.em_votacao).length}</div>
+            <div className="text-sm text-gray-600">Em Votação</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {proposicoes.filter(p => p.data_aprovacao).length}
-            </div>
-            <div className="text-sm text-gray-600">Aprovadas</div>
+            <div className="text-2xl font-bold text-green-600">{proposicoes.reduce((acc, p) => acc + (p.stats?.votacoes_nominais || 0), 0)}</div>
+            <div className="text-sm text-gray-600">Votações Nominais</div>
           </div>
         </div>
       </div>

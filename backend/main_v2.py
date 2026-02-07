@@ -5,12 +5,13 @@ import requests
 import json
 import os
 from dotenv import load_dotenv
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 from analisador_votacoes import AnalisadorVotacoes
 import asyncio
 from datetime import datetime
 import sys
+import logging
 
 # Add database imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
@@ -45,6 +46,16 @@ CAMARA_BASE_URL = "https://dadosabertos.camara.leg.br/api/v2"
 CACHE_TTL = {"deputados": 604800, "votacoes": 86400, "proposicoes": 2592000}
 
 analisador = AnalisadorVotacoes()
+logger = logging.getLogger(__name__)
+
+AUTO_SYNC_INTERVAL_SECONDS = 15 * 60
+auto_sync_task: Optional[asyncio.Task] = None
+auto_sync_stop_event = asyncio.Event()
+last_monitor_sync: Dict[str, Any] = {
+    "executado_em": None,
+    "status": "not_started",
+    "resultado": {}
+}
 
 class ProposicaoRequest(BaseModel):
     tipo: str
@@ -88,6 +99,82 @@ async def fetch_with_cache(endpoint, cache_key, ttl):
         
         return data
     return None
+
+
+def _run_monitor_sync_cycle() -> Dict[str, Any]:
+    """
+    Run one proposition monitoring sync cycle and keep last execution metadata.
+    """
+    from database.proposicao_monitor_service import run_monitor_sync_once
+
+    global last_monitor_sync
+
+    try:
+        result = run_monitor_sync_once()
+        last_monitor_sync = {
+            "executado_em": datetime.now().isoformat(),
+            "status": "ok",
+            "resultado": result
+        }
+        return result
+    except Exception as exc:
+        logger.exception("Erro na sincronização automática de proposições: %s", exc)
+        last_monitor_sync = {
+            "executado_em": datetime.now().isoformat(),
+            "status": "error",
+            "resultado": {"erro": str(exc)}
+        }
+        raise
+
+
+async def _auto_sync_loop():
+    """
+    Background loop that syncs propositions every 15 minutes.
+    """
+    logger.info("Iniciando loop de sincronização automática de proposições (%ss)", AUTO_SYNC_INTERVAL_SECONDS)
+
+    while not auto_sync_stop_event.is_set():
+        try:
+            await asyncio.to_thread(_run_monitor_sync_cycle)
+        except Exception:
+            # Failure already logged in _run_monitor_sync_cycle
+            pass
+
+        try:
+            await asyncio.wait_for(auto_sync_stop_event.wait(), timeout=AUTO_SYNC_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            continue
+
+    logger.info("Loop de sincronização automática de proposições finalizado")
+
+
+@app.on_event("startup")
+async def start_background_monitoring():
+    """
+    Start automatic proposition monitoring when API starts.
+    """
+    global auto_sync_task
+
+    auto_sync_stop_event.clear()
+    if auto_sync_task is None or auto_sync_task.done():
+        auto_sync_task = asyncio.create_task(_auto_sync_loop())
+
+
+@app.on_event("shutdown")
+async def stop_background_monitoring():
+    """
+    Stop background monitoring loop gracefully.
+    """
+    global auto_sync_task
+
+    auto_sync_stop_event.set()
+    if auto_sync_task:
+        try:
+            await asyncio.wait_for(auto_sync_task, timeout=5)
+        except Exception:
+            auto_sync_task.cancel()
+        finally:
+            auto_sync_task = None
 
 @app.get("/deputados")
 async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
@@ -1067,6 +1154,56 @@ async def get_proposicoes_relevantes(relevancia: Optional[str] = None):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar proposições: {str(e)}")
+
+
+@app.get("/proposicoes/monitoradas")
+async def get_proposicoes_monitoradas(
+    relevancia: Optional[str] = None,
+    somente_em_votacao: bool = False,
+    limit: int = 200
+):
+    """
+    List monitored propositions with aggregated local stats.
+    Data is continuously enriched by the automatic 15-minute sync.
+    """
+    from database.proposicao_monitor_service import get_monitored_proposicoes
+
+    try:
+        proposicoes = get_monitored_proposicoes(relevancia=relevancia, limit=limit)
+        if somente_em_votacao:
+            proposicoes = [p for p in proposicoes if p.get("em_votacao")]
+
+        return {
+            "success": True,
+            "data": {
+                "proposicoes": proposicoes,
+                "metadata": {
+                    "total": len(proposicoes),
+                    "somente_em_votacao": somente_em_votacao,
+                    "intervalo_sync_minutos": 15,
+                    "ultima_sincronizacao": last_monitor_sync.get("executado_em"),
+                    "status_ultima_sincronizacao": last_monitor_sync.get("status")
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar proposições monitoradas: {str(e)}")
+
+
+@app.post("/proposicoes/monitoradas/sync")
+async def sync_proposicoes_monitoradas():
+    """
+    Trigger manual sync for monitored propositions.
+    """
+    try:
+        result = await asyncio.to_thread(_run_monitor_sync_cycle)
+        return {
+            "success": True,
+            "message": "Sincronização executada com sucesso",
+            "data": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao sincronizar proposições monitoradas: {str(e)}")
 
 @app.post("/proposicoes/relevantes")
 async def add_proposicao_relevante(request: AddProposicaoRequest):

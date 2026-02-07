@@ -5,14 +5,20 @@ echo "VotoDB PostgreSQL Management"
 case "$1" in
     "start")
         echo "Starting PostgreSQL with Docker..."
-        docker run -d \
-            --name votodb-postgres \
-            -e POSTGRES_DB=votodb \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            -p 5432:5432 \
-            -v votodb_data:/var/lib/postgresql/data \
-            postgres:15
+        # If container already exists, just start it instead of trying to recreate.
+        if docker ps -a --format "{{.Names}}" | grep -q "^votodb-postgres$"; then
+            echo "Container votodb-postgres already exists. Starting existing container..."
+            docker start votodb-postgres > /dev/null
+        else
+            docker run -d \
+                --name votodb-postgres \
+                -e POSTGRES_DB=votodb \
+                -e POSTGRES_USER=postgres \
+                -e POSTGRES_PASSWORD=postgres \
+                -p 5432:5432 \
+                -v votodb_data:/var/lib/postgresql/data \
+                postgres:15
+        fi
         
         echo "Waiting for PostgreSQL to be ready..."
         sleep 5
@@ -59,15 +65,24 @@ case "$1" in
     "init")
         echo "Initializing database..."
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        cd "$SCRIPT_DIR/backend"
-        python setup_database.py init
+        cd "$SCRIPT_DIR"
+        ./.venv/bin/python init_database.py
         ;;
     
     "stats")
         echo "Database statistics:"
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        cd "$SCRIPT_DIR/backend"
-        python setup_database.py stats
+        cd "$SCRIPT_DIR"
+        ./.venv/bin/python - <<'PY'
+from backend.database.connection import SessionLocal
+from backend.database.model import Deputado, Proposicao, Votacao, Voto
+
+with SessionLocal() as db:
+    print("deputados:", db.query(Deputado).count())
+    print("proposicoes:", db.query(Proposicao).count())
+    print("votacoes:", db.query(Votacao).count())
+    print("votos:", db.query(Voto).count())
+PY
         ;;
     
     "backup")

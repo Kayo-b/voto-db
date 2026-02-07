@@ -1,0 +1,25 @@
+{
+  "name": "voto-db",
+  "version": "1.0.0",
+  "description": "Sistema completo para análise de votações da Câmara dos Deputados, com foco em proposições de alta relevância social e política.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kayo-b/voto-db.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kayo-b/voto-db/issues"
+  },
+  "homepage": "https://github.com/Kayo-b/voto-db#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^25.1.0"
+  }
+}
