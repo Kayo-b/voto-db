@@ -5,7 +5,7 @@ votes, and voting sessions from the Brazilian Chamber of Deputies API.
 """
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Float, Boolean, 
+    Column, Integer, String, Text, DateTime, Float, Boolean, Numeric, JSON,
     ForeignKey, UniqueConstraint, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -205,6 +205,82 @@ class CacheMetadata(Base):
     # Indexes
     __table_args__ = (
         Index('idx_cache_type_expires', 'cache_type', 'expires_at'),
+    )
+
+
+class FiscalPerson(Base):
+    """Person under fiscal investigation (politicians and other public servants)."""
+    __tablename__ = 'fiscal_pessoas'
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String(255), nullable=False, index=True)
+    cpf_hash = Column(String(128), unique=True, nullable=True, index=True)
+    cargo = Column(String(100), nullable=False, index=True)  # deputado, senador, juiz, presidente, etc
+    orgao = Column(String(150), nullable=True, index=True)   # câmara, senado, stf, planalto, etc
+    ativo = Column(Boolean, default=True, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    records = relationship("FiscalFinancialRecord", back_populates="person")
+    analyses = relationship("FiscalAnalysisResult", back_populates="person")
+
+    __table_args__ = (
+        Index('idx_fiscal_pessoas_cargo_orgao', 'cargo', 'orgao'),
+    )
+
+
+class FiscalFinancialRecord(Base):
+    """Normalized financial records from multiple open-data sources."""
+    __tablename__ = 'fiscal_registros_financeiros'
+
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey('fiscal_pessoas.id'), nullable=False, index=True)
+    ano = Column(Integer, nullable=False, index=True)
+    tipo = Column(String(50), nullable=False, index=True)  # salario, doacao_recebida, patrimonio_declarado, financiamento_publico
+    valor = Column(Numeric(16, 2), nullable=False)
+    moeda = Column(String(10), default='BRL', nullable=False)
+    fonte = Column(String(120), nullable=False, index=True)
+    fonte_url = Column(String(500), nullable=True)
+    confianca = Column(Float, default=1.0, nullable=False)
+    extra_json = Column(JSON, nullable=True)
+    data_referencia = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    person = relationship("FiscalPerson", back_populates="records")
+
+    __table_args__ = (
+        Index('idx_fiscal_registros_person_ano_tipo', 'person_id', 'ano', 'tipo'),
+    )
+
+
+class FiscalAnalysisResult(Base):
+    """Precomputed yearly compatibility analysis for fast query responses."""
+    __tablename__ = 'fiscal_resultados_analise'
+
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey('fiscal_pessoas.id'), nullable=False, index=True)
+    ano = Column(Integer, nullable=False, index=True)
+    patrimonio_anterior = Column(Numeric(16, 2), nullable=True)
+    patrimonio_atual = Column(Numeric(16, 2), nullable=True)
+    crescimento_patrimonial = Column(Numeric(16, 2), nullable=True)
+    inflows_conhecidos = Column(Numeric(16, 2), nullable=True)
+    excesso_nao_explicado = Column(Numeric(16, 2), nullable=True)
+    indice_compatibilidade = Column(Float, nullable=True)  # 1.0 = totalmente compatível
+    risco_score = Column(Float, nullable=False, default=0.0, index=True)  # 0-100
+    sinalizado = Column(Boolean, nullable=False, default=False, index=True)
+    regra_disparo = Column(String(255), nullable=True)
+    detalhes_json = Column(JSON, nullable=True)
+    analisado_em = Column(DateTime, default=func.now(), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    person = relationship("FiscalPerson", back_populates="analyses")
+
+    __table_args__ = (
+        UniqueConstraint('person_id', 'ano', name='unique_fiscal_person_year'),
+        Index('idx_fiscal_resultados_sinalizado_risco', 'sinalizado', 'risco_score'),
     )
 
 

@@ -4,15 +4,17 @@ import DeputadoDetails from './components/DeputadoDetails';
 import ProposicoesRelevantes from './components/ProposicoesRelevantes';
 import AnaliseAvancada from './components/AnaliseAvancada';
 import VotacoesRecentes from './components/VotacoesRecentes';
+import FiscalInvestigacao from './components/FiscalInvestigacao';
 import { Deputado } from './types/api';
 
-type ViewType = 'search' | 'proposicoes' | 'analise' | 'votacoes' | 'details';
+type ViewType = 'search' | 'proposicoes' | 'analise' | 'votacoes' | 'fiscal' | 'details';
 
 const navItems = [
   { id: 'search' as ViewType, label: 'Buscar Deputados', icon: SearchIcon },
   { id: 'proposicoes' as ViewType, label: 'Proposições', icon: DocumentIcon },
   { id: 'analise' as ViewType, label: 'Análise Avançada', icon: ChartIcon },
   { id: 'votacoes' as ViewType, label: 'Votações Recentes', icon: ClockIcon },
+  { id: 'fiscal' as ViewType, label: 'Investigação Patrimonial', icon: ShieldIcon },
 ];
 
 function App(): React.ReactElement {
@@ -47,6 +49,8 @@ function App(): React.ReactElement {
         return <AnaliseAvancada deputadoId={selectedDeputado?.id} />;
       case 'votacoes':
         return <VotacoesRecentes />;
+      case 'fiscal':
+        return <FiscalInvestigacao />;
       case 'details':
         return selectedDeputado ? (
           <DeputadoDetails deputado={selectedDeputado} onBack={handleBack} />
@@ -78,6 +82,7 @@ function App(): React.ReactElement {
       case 'proposicoes': return 'Proposições Relevantes';
       case 'analise': return 'Análise Avançada';
       case 'votacoes': return 'Votações Recentes';
+      case 'fiscal': return 'Investigação Patrimonial';
       case 'details': return selectedDeputado?.nome || 'Detalhes do Deputado';
       default: return 'Buscar Deputados';
     }
@@ -148,6 +153,7 @@ function App(): React.ReactElement {
                   {currentView === 'proposicoes' && 'Gerencie proposições de alta relevância'}
                   {currentView === 'analise' && 'Análise detalhada de perfil de votação'}
                   {currentView === 'votacoes' && 'Acompanhe as votações em tempo real'}
+                  {currentView === 'fiscal' && 'Cruze patrimônio, remuneração e financiamento público'}
                   {currentView === 'details' && 'Visualize o histórico de votações'}
                 </p>
               </div>
@@ -223,6 +229,15 @@ function DatabaseIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
     </svg>
   );
 }

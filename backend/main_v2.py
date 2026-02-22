@@ -18,6 +18,28 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
 from database.import_service import import_deputados_from_json
 from database.voting_import_service import import_voting_history_from_json
 from database.connection import get_database
+from database.fiscal_investigation_service import (
+    list_open_data_sources,
+    list_source_domains,
+    get_integration_status,
+    upsert_person,
+    add_financial_records,
+    run_analysis,
+    get_suspects,
+    get_people_ranking,
+    get_overview,
+    reconcile_people_identities,
+    analyze_cpf_report,
+    seed_demo_data,
+    sync_portal_transparencia_servidores_remuneracao,
+    sync_portal_transparencia_emendas,
+    sync_camara_deputados_expenses,
+    sync_pncp_contracts,
+    sync_tse_donations_from_csv_url,
+    sync_tse_assets_from_csv_url,
+    sync_tse_candidates_from_csv_url,
+    sync_tse_auto_from_ckan,
+)
 from sqlalchemy.orm import Session
 
 load_dotenv()
@@ -57,6 +79,16 @@ last_monitor_sync: Dict[str, Any] = {
     "resultado": {}
 }
 
+FISCAL_AUTO_SYNC_ENABLED = os.getenv("ENABLE_FISCAL_AUTO_SYNC", "false").lower() == "true"
+FISCAL_AUTO_SYNC_INTERVAL_SECONDS = int(os.getenv("FISCAL_AUTO_SYNC_INTERVAL_SECONDS", str(24 * 60 * 60)))
+fiscal_auto_sync_task: Optional[asyncio.Task] = None
+fiscal_auto_sync_stop_event = asyncio.Event()
+last_fiscal_sync: Dict[str, Any] = {
+    "executado_em": None,
+    "status": "not_started",
+    "resultado": {}
+}
+
 class ProposicaoRequest(BaseModel):
     tipo: str
     numero: int
@@ -75,6 +107,83 @@ class ValidateProposicaoRequest(BaseModel):
 class AnaliseDeputadoRequest(BaseModel):
     deputado_id: int
     incluir_proposicoes: Optional[List[str]] = None
+
+
+class FiscalPersonRequest(BaseModel):
+    id: Optional[int] = None
+    nome: str
+    cpf_hash: Optional[str] = None
+    cargo: str
+    orgao: Optional[str] = None
+    ativo: bool = True
+    metadata_json: Optional[Dict[str, Any]] = None
+
+
+class FiscalRecordInput(BaseModel):
+    ano: int
+    tipo: str
+    valor: float
+    moeda: str = "BRL"
+    fonte: str
+    fonte_url: Optional[str] = None
+    confianca: float = 1.0
+    extra_json: Optional[Dict[str, Any]] = None
+    data_referencia: Optional[str] = None
+
+
+class FiscalRecordsRequest(BaseModel):
+    person_id: int
+    records: List[FiscalRecordInput]
+
+
+class FiscalPortalSyncRequest(BaseModel):
+    mes_ano: Optional[int] = None  # YYYYMM
+    max_servidores: int = 50
+    pagina_inicial: int = 1
+
+
+class FiscalEmendasSyncRequest(BaseModel):
+    ano: Optional[int] = None
+    max_paginas: int = 10
+    pagina_inicial: int = 1
+
+
+class FiscalDonationsSyncRequest(BaseModel):
+    ano: int
+    csv_url: str
+    max_linhas: int = 50000
+
+
+class FiscalAssetsSyncRequest(BaseModel):
+    ano: int
+    csv_url: str
+    max_linhas: int = 50000
+
+
+class FiscalCandidatesSyncRequest(BaseModel):
+    ano: int
+    csv_url: str
+    max_linhas: int = 100000
+
+
+class FiscalCamaraExpensesSyncRequest(BaseModel):
+    ano: Optional[int] = None
+    max_deputados: int = 100
+    max_paginas_despesas_por_deputado: int = 10
+
+
+class FiscalPncpContractsSyncRequest(BaseModel):
+    data_inicial: str  # YYYYMMDD
+    data_final: str    # YYYYMMDD
+    max_paginas: int = 5
+    tamanho_pagina: int = 50
+
+
+class FiscalTseAutoSyncRequest(BaseModel):
+    ano: int
+    max_linhas_doacoes: int = 50000
+    max_linhas_bens: int = 50000
+    max_linhas_candidatos: int = 100000
 
 async def fetch_with_cache(endpoint, cache_key, ttl):
     # Redis cache commented out - using database-first approach instead
@@ -148,6 +257,128 @@ async def _auto_sync_loop():
     logger.info("Loop de sincronização automática de proposições finalizado")
 
 
+def _run_fiscal_sync_cycle() -> Dict[str, Any]:
+    """
+    Run one fiscal sync cycle with available connectors and execute analysis.
+    Connectors are gated by available credentials/config.
+    """
+    from database.connection import SessionLocal
+
+    global last_fiscal_sync
+
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        mes_ano = int(now.strftime("%Y%m"))
+        ano = now.year
+
+        result: Dict[str, Any] = {"connectors": {}}
+
+        # Connector 1: Portal Transparência - remuneração
+        if os.getenv("PORTAL_TRANSPARENCIA_API_KEY"):
+            result["connectors"]["portal_remuneracao"] = sync_portal_transparencia_servidores_remuneracao(
+                db=db,
+                mes_ano=mes_ano,
+                max_servidores=int(os.getenv("FISCAL_SYNC_MAX_SERVIDORES", "100")),
+            )
+
+            # Connector 2: Portal Transparência - emendas (financiamento público)
+            result["connectors"]["portal_emendas"] = sync_portal_transparencia_emendas(
+                db=db,
+                ano=ano,
+                max_paginas=int(os.getenv("FISCAL_SYNC_MAX_PAGINAS_EMENDAS", "10")),
+            )
+
+        if os.getenv("ENABLE_CAMARA_EXPENSES_SYNC", "false").lower() == "true":
+            result["connectors"]["camara_despesas"] = sync_camara_deputados_expenses(
+                db=db,
+                ano=ano,
+                max_deputados=int(os.getenv("FISCAL_SYNC_CAMARA_MAX_DEPUTADOS", "100")),
+                max_paginas_despesas_por_deputado=int(os.getenv("FISCAL_SYNC_CAMARA_MAX_PAGINAS_DESPESAS", "10")),
+            )
+
+        if os.getenv("ENABLE_PNCP_CONTRACTS_SYNC", "false").lower() == "true":
+            result["connectors"]["pncp_contratos"] = sync_pncp_contracts(
+                db=db,
+                data_inicial=os.getenv("FISCAL_SYNC_PNCP_DATA_INICIAL", f"{ano}0101"),
+                data_final=os.getenv("FISCAL_SYNC_PNCP_DATA_FINAL", now.strftime("%Y%m%d")),
+                max_paginas=int(os.getenv("FISCAL_SYNC_PNCP_MAX_PAGINAS", "5")),
+                tamanho_pagina=int(os.getenv("FISCAL_SYNC_PNCP_TAMANHO_PAGINA", "50")),
+            )
+
+        # Connector 3: TSE donations CSV/ZIP (optional env)
+        csv_url = os.getenv("TSE_DONATIONS_CSV_URL")
+        if csv_url:
+            result["connectors"]["tse_doacoes"] = sync_tse_donations_from_csv_url(
+                db=db,
+                csv_url=csv_url,
+                ano=ano,
+                max_linhas=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_DOACOES", "50000")),
+            )
+
+        assets_url = os.getenv("TSE_ASSETS_CSV_URL")
+        if assets_url:
+            result["connectors"]["tse_bens"] = sync_tse_assets_from_csv_url(
+                db=db,
+                csv_url=assets_url,
+                ano=ano,
+                max_linhas=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_BENS", "50000")),
+            )
+
+        candidates_url = os.getenv("TSE_CANDIDATES_CSV_URL")
+        if candidates_url:
+            result["connectors"]["tse_candidaturas"] = sync_tse_candidates_from_csv_url(
+                db=db,
+                csv_url=candidates_url,
+                ano=ano,
+                max_linhas=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_CANDIDATOS", "100000")),
+            )
+
+        if os.getenv("ENABLE_TSE_CKAN_AUTO_SYNC", "false").lower() == "true":
+            result["connectors"]["tse_auto_ckan"] = sync_tse_auto_from_ckan(
+                db=db,
+                ano=int(os.getenv("FISCAL_SYNC_TSE_ANO", str(ano))),
+                max_linhas_doacoes=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_DOACOES", "50000")),
+                max_linhas_bens=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_BENS", "50000")),
+                max_linhas_candidatos=int(os.getenv("FISCAL_SYNC_MAX_LINHAS_CANDIDATOS", "100000")),
+            )
+
+        result["reconcile"] = reconcile_people_identities(db)
+        result["analysis"] = run_analysis(db)
+        last_fiscal_sync = {
+            "executado_em": datetime.now().isoformat(),
+            "status": "ok",
+            "resultado": result
+        }
+        return result
+    except Exception as exc:
+        logger.exception("Erro na sincronização automática fiscal: %s", exc)
+        last_fiscal_sync = {
+            "executado_em": datetime.now().isoformat(),
+            "status": "error",
+            "resultado": {"erro": str(exc)}
+        }
+        raise
+    finally:
+        db.close()
+
+
+async def _fiscal_auto_sync_loop():
+    logger.info("Iniciando loop de sincronização fiscal (%ss)", FISCAL_AUTO_SYNC_INTERVAL_SECONDS)
+    while not fiscal_auto_sync_stop_event.is_set():
+        try:
+            await asyncio.to_thread(_run_fiscal_sync_cycle)
+        except Exception:
+            pass
+
+        try:
+            await asyncio.wait_for(fiscal_auto_sync_stop_event.wait(), timeout=FISCAL_AUTO_SYNC_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            continue
+
+    logger.info("Loop de sincronização fiscal finalizado")
+
+
 @app.on_event("startup")
 async def start_background_monitoring():
     """
@@ -159,13 +390,19 @@ async def start_background_monitoring():
     if auto_sync_task is None or auto_sync_task.done():
         auto_sync_task = asyncio.create_task(_auto_sync_loop())
 
+    if FISCAL_AUTO_SYNC_ENABLED:
+        fiscal_auto_sync_stop_event.clear()
+        global fiscal_auto_sync_task
+        if fiscal_auto_sync_task is None or fiscal_auto_sync_task.done():
+            fiscal_auto_sync_task = asyncio.create_task(_fiscal_auto_sync_loop())
+
 
 @app.on_event("shutdown")
 async def stop_background_monitoring():
     """
     Stop background monitoring loop gracefully.
     """
-    global auto_sync_task
+    global auto_sync_task, fiscal_auto_sync_task
 
     auto_sync_stop_event.set()
     if auto_sync_task:
@@ -175,6 +412,15 @@ async def stop_background_monitoring():
             auto_sync_task.cancel()
         finally:
             auto_sync_task = None
+
+    fiscal_auto_sync_stop_event.set()
+    if fiscal_auto_sync_task:
+        try:
+            await asyncio.wait_for(fiscal_auto_sync_task, timeout=5)
+        except Exception:
+            fiscal_auto_sync_task.cancel()
+        finally:
+            fiscal_auto_sync_task = None
 
 @app.get("/deputados")
 async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
@@ -1650,6 +1896,315 @@ async def buscar_votacoes_recentes_legacy(dias: int = 7, tipo: str = "nominais",
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/fiscal-investigation/sources")
+async def fiscal_sources():
+    return {
+        "success": True,
+        "sources": list_open_data_sources(),
+        "notes": [
+            "Lista prioriza fontes úteis para trilhas de patrimônio/renda de agentes públicos.",
+            "Baseada em open-gov-data.md e preparada para conectores incrementais."
+        ]
+    }
+
+
+@app.get("/fiscal-investigation/source-domains")
+async def fiscal_source_domains():
+    return {
+        "success": True,
+        "data": list_source_domains(),
+    }
+
+
+@app.get("/fiscal-investigation/integrations/status")
+async def fiscal_integrations_status():
+    return {
+        "success": True,
+        "data": get_integration_status(),
+    }
+
+
+@app.get("/fiscal-investigation/overview")
+async def fiscal_overview(db: Session = Depends(get_database)):
+    return {
+        "success": True,
+        "data": get_overview(db)
+    }
+
+
+@app.post("/fiscal-investigation/person")
+async def fiscal_upsert_person(payload: FiscalPersonRequest, db: Session = Depends(get_database)):
+    person = upsert_person(db, payload.dict())
+    return {
+        "success": True,
+        "person": {
+            "id": person.id,
+            "nome": person.nome,
+            "cargo": person.cargo,
+            "orgao": person.orgao,
+            "ativo": person.ativo,
+        }
+    }
+
+
+@app.post("/fiscal-investigation/records")
+async def fiscal_add_records(payload: FiscalRecordsRequest, db: Session = Depends(get_database)):
+    records = [record.dict() for record in payload.records]
+    inserted = add_financial_records(db, person_id=payload.person_id, records=records)
+    return {
+        "success": True,
+        "inserted": inserted,
+        "person_id": payload.person_id
+    }
+
+
+@app.post("/fiscal-investigation/sync/portal-transparencia")
+async def fiscal_sync_portal_transparencia(payload: FiscalPortalSyncRequest, db: Session = Depends(get_database)):
+    mes_ano = payload.mes_ano or int(datetime.now().strftime("%Y%m"))
+    if payload.max_servidores <= 0:
+        raise HTTPException(status_code=400, detail="'max_servidores' deve ser maior que zero")
+
+    try:
+        result = sync_portal_transparencia_servidores_remuneracao(
+            db=db,
+            mes_ano=mes_ano,
+            max_servidores=payload.max_servidores,
+            pagina_inicial=payload.pagina_inicial,
+        )
+        return {
+            "success": True,
+            "connector": "portal_transparencia",
+            "result": result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar Portal da Transparência: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/public-financing")
+async def fiscal_sync_public_financing(payload: FiscalEmendasSyncRequest, db: Session = Depends(get_database)):
+    ano = payload.ano or datetime.now().year
+    if payload.max_paginas <= 0:
+        raise HTTPException(status_code=400, detail="'max_paginas' deve ser maior que zero")
+
+    try:
+        result = sync_portal_transparencia_emendas(
+            db=db,
+            ano=ano,
+            max_paginas=payload.max_paginas,
+            pagina_inicial=payload.pagina_inicial,
+        )
+        return {"success": True, "connector": "portal_transparencia_emendas", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar emendas no Portal da Transparência: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/camara-expenses")
+async def fiscal_sync_camara_expenses(payload: FiscalCamaraExpensesSyncRequest, db: Session = Depends(get_database)):
+    ano = payload.ano or datetime.now().year
+    if payload.max_deputados <= 0:
+        raise HTTPException(status_code=400, detail="'max_deputados' deve ser maior que zero")
+    if payload.max_paginas_despesas_por_deputado <= 0:
+        raise HTTPException(status_code=400, detail="'max_paginas_despesas_por_deputado' deve ser maior que zero")
+    try:
+        result = sync_camara_deputados_expenses(
+            db=db,
+            ano=ano,
+            max_deputados=payload.max_deputados,
+            max_paginas_despesas_por_deputado=payload.max_paginas_despesas_por_deputado,
+        )
+        return {"success": True, "connector": "camara_despesas", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar despesas da Câmara: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/pncp-contracts")
+async def fiscal_sync_pncp_contracts(payload: FiscalPncpContractsSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_paginas <= 0:
+        raise HTTPException(status_code=400, detail="'max_paginas' deve ser maior que zero")
+    if payload.tamanho_pagina < 10:
+        raise HTTPException(status_code=400, detail="'tamanho_pagina' deve ser >= 10")
+    try:
+        result = sync_pncp_contracts(
+            db=db,
+            data_inicial=payload.data_inicial,
+            data_final=payload.data_final,
+            max_paginas=payload.max_paginas,
+            tamanho_pagina=payload.tamanho_pagina,
+        )
+        return {"success": True, "connector": "pncp_contratos", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar contratos no PNCP: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/donations")
+async def fiscal_sync_donations(payload: FiscalDonationsSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_tse_donations_from_csv_url(
+            db=db,
+            csv_url=payload.csv_url,
+            ano=payload.ano,
+            max_linhas=payload.max_linhas,
+        )
+        return {"success": True, "connector": "tse_donations_csv", "result": result}
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de doações: {str(exc)}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/fiscal-investigation/sync/assets")
+async def fiscal_sync_assets(payload: FiscalAssetsSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_tse_assets_from_csv_url(
+            db=db,
+            csv_url=payload.csv_url,
+            ano=payload.ano,
+            max_linhas=payload.max_linhas,
+        )
+        return {"success": True, "connector": "tse_assets_csv", "result": result}
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de bens do TSE: {str(exc)}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/fiscal-investigation/sync/candidates")
+async def fiscal_sync_candidates(payload: FiscalCandidatesSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_tse_candidates_from_csv_url(
+            db=db,
+            csv_url=payload.csv_url,
+            ano=payload.ano,
+            max_linhas=payload.max_linhas,
+        )
+        return {"success": True, "connector": "tse_candidates_csv", "result": result}
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de candidaturas do TSE: {str(exc)}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/fiscal-investigation/sync/tse-auto")
+async def fiscal_sync_tse_auto(payload: FiscalTseAutoSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas_doacoes <= 0 or payload.max_linhas_bens <= 0 or payload.max_linhas_candidatos <= 0:
+        raise HTTPException(status_code=400, detail="Todos os limites de linhas devem ser maiores que zero")
+    try:
+        result = sync_tse_auto_from_ckan(
+            db=db,
+            ano=payload.ano,
+            max_linhas_doacoes=payload.max_linhas_doacoes,
+            max_linhas_bens=payload.max_linhas_bens,
+            max_linhas_candidatos=payload.max_linhas_candidatos,
+        )
+        return {"success": True, "connector": "tse_auto_ckan", "result": result}
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar CKAN do TSE: {str(exc)}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/fiscal-investigation/analyze")
+async def fiscal_run_analysis(
+    anos: Optional[str] = None,
+    min_excesso_brl: float = 100000.0,
+    min_ratio_compatibilidade: float = 0.7,
+    db: Session = Depends(get_database),
+):
+    parsed_years: Optional[List[int]] = None
+    if anos:
+        try:
+            parsed_years = [int(year.strip()) for year in anos.split(",") if year.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Parâmetro 'anos' inválido. Use CSV numérico, ex: 2022,2023,2024")
+
+    result = run_analysis(
+        db,
+        anos=parsed_years,
+        min_excesso_brl=min_excesso_brl,
+        min_ratio_compatibilidade=min_ratio_compatibilidade,
+    )
+    return {"success": True, "result": result}
+
+
+@app.post("/fiscal-investigation/reconcile-identities")
+async def fiscal_reconcile_identities(db: Session = Depends(get_database)):
+    result = reconcile_people_identities(db)
+    return {"success": True, "result": result}
+
+
+@app.get("/fiscal-investigation/suspects")
+async def fiscal_suspects(
+    min_risk_score: float = 50.0,
+    limit: int = 100,
+    db: Session = Depends(get_database),
+):
+    suspects = get_suspects(db, min_risk_score=min_risk_score, limit=limit)
+    return {
+        "success": True,
+        "total": len(suspects),
+        "dados": suspects
+    }
+
+
+@app.get("/fiscal-investigation/people-ranking")
+async def fiscal_people_ranking(
+    limit: int = 5000,
+    include_sem_dados: bool = False,
+    db: Session = Depends(get_database),
+):
+    rows = get_people_ranking(db, limit=limit, include_sem_dados=include_sem_dados)
+    return {
+        "success": True,
+        "total": len(rows),
+        "dados": rows
+    }
+
+
+@app.get("/fiscal-investigation/analyze/{cpf}")
+async def fiscal_analyze_cpf(cpf: str, db: Session = Depends(get_database)):
+    try:
+        report = analyze_cpf_report(db, cpf)
+        return {"success": True, "report": report}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/fiscal-investigation/sync/status")
+async def fiscal_sync_status():
+    return {
+        "success": True,
+        "enabled": FISCAL_AUTO_SYNC_ENABLED,
+        "interval_seconds": FISCAL_AUTO_SYNC_INTERVAL_SECONDS,
+        "last_sync": last_fiscal_sync,
+    }
+
+
+@app.post("/fiscal-investigation/demo-seed")
+async def fiscal_demo_seed(db: Session = Depends(get_database)):
+    seed_info = seed_demo_data(db)
+    result = run_analysis(db)
+    return {
+        "success": True,
+        "seed": seed_info,
+        "analysis": result
+    }
+
 
 @app.get("/health")
 async def health_check():

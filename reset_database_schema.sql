@@ -5,6 +5,9 @@
 DROP TABLE IF EXISTS analises_deputado CASCADE;
 DROP TABLE IF EXISTS analises_deputados CASCADE;
 DROP TABLE IF EXISTS cache_metadata CASCADE;
+DROP TABLE IF EXISTS fiscal_resultados_analise CASCADE;
+DROP TABLE IF EXISTS fiscal_registros_financeiros CASCADE;
+DROP TABLE IF EXISTS fiscal_pessoas CASCADE;
 DROP TABLE IF EXISTS estatisticas_deputados CASCADE;
 DROP TABLE IF EXISTS votos CASCADE;
 DROP TABLE IF EXISTS votacoes CASCADE;
@@ -138,6 +141,57 @@ CREATE TABLE cache_metadata (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table: fiscal_pessoas (public servants under investigation)
+CREATE TABLE fiscal_pessoas (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    cpf_hash VARCHAR(128) UNIQUE,
+    cargo VARCHAR(100) NOT NULL,
+    orgao VARCHAR(150),
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata_json JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: fiscal_registros_financeiros (normalized records)
+CREATE TABLE fiscal_registros_financeiros (
+    id SERIAL PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES fiscal_pessoas(id),
+    ano INTEGER NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    valor NUMERIC(16,2) NOT NULL,
+    moeda VARCHAR(10) NOT NULL DEFAULT 'BRL',
+    fonte VARCHAR(120) NOT NULL,
+    fonte_url VARCHAR(500),
+    confianca REAL NOT NULL DEFAULT 1.0,
+    extra_json JSONB,
+    data_referencia TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: fiscal_resultados_analise (precomputed anomaly checks)
+CREATE TABLE fiscal_resultados_analise (
+    id SERIAL PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES fiscal_pessoas(id),
+    ano INTEGER NOT NULL,
+    patrimonio_anterior NUMERIC(16,2),
+    patrimonio_atual NUMERIC(16,2),
+    crescimento_patrimonial NUMERIC(16,2),
+    inflows_conhecidos NUMERIC(16,2),
+    excesso_nao_explicado NUMERIC(16,2),
+    indice_compatibilidade REAL,
+    risco_score REAL NOT NULL DEFAULT 0.0,
+    sinalizado BOOLEAN NOT NULL DEFAULT FALSE,
+    regra_disparo VARCHAR(255),
+    detalhes_json JSONB,
+    analisado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(person_id, ano)
+);
+
 -- Create all indexes
 CREATE INDEX idx_partidos_sigla ON partidos(sigla);
 
@@ -160,6 +214,20 @@ CREATE INDEX idx_votos_votacao ON votos(votacao_id);
 CREATE INDEX idx_cache_key ON cache_metadata(cache_key);
 CREATE INDEX idx_cache_type_expires ON cache_metadata(cache_type, expires_at);
 
+CREATE INDEX idx_fiscal_pessoas_nome ON fiscal_pessoas(nome);
+CREATE INDEX idx_fiscal_pessoas_cargo ON fiscal_pessoas(cargo);
+CREATE INDEX idx_fiscal_pessoas_cargo_orgao ON fiscal_pessoas(cargo, orgao);
+
+CREATE INDEX idx_fiscal_registros_person ON fiscal_registros_financeiros(person_id);
+CREATE INDEX idx_fiscal_registros_ano ON fiscal_registros_financeiros(ano);
+CREATE INDEX idx_fiscal_registros_tipo ON fiscal_registros_financeiros(tipo);
+CREATE INDEX idx_fiscal_registros_person_ano_tipo ON fiscal_registros_financeiros(person_id, ano, tipo);
+
+CREATE INDEX idx_fiscal_resultados_person ON fiscal_resultados_analise(person_id);
+CREATE INDEX idx_fiscal_resultados_ano ON fiscal_resultados_analise(ano);
+CREATE INDEX idx_fiscal_resultados_sinalizado ON fiscal_resultados_analise(sinalizado);
+CREATE INDEX idx_fiscal_resultados_sinalizado_risco ON fiscal_resultados_analise(sinalizado, risco_score);
+
 -- Create triggers for automatic timestamp updates
 CREATE TRIGGER update_legislaturas_updated_at BEFORE UPDATE ON legislaturas FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_partidos_updated_at BEFORE UPDATE ON partidos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -168,6 +236,9 @@ CREATE TRIGGER update_deputados_updated_at BEFORE UPDATE ON deputados FOR EACH R
 CREATE TRIGGER update_votacoes_updated_at BEFORE UPDATE ON votacoes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_votos_updated_at BEFORE UPDATE ON votos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_estatisticas_deputados_updated_at BEFORE UPDATE ON estatisticas_deputados FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_fiscal_pessoas_updated_at BEFORE UPDATE ON fiscal_pessoas FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_fiscal_registros_financeiros_updated_at BEFORE UPDATE ON fiscal_registros_financeiros FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_fiscal_resultados_analise_updated_at BEFORE UPDATE ON fiscal_resultados_analise FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Create a comprehensive view for deputy information
 CREATE VIEW view_deputados_completo AS
@@ -216,6 +287,9 @@ COMMENT ON TABLE votacoes IS 'Voting sessions for legislative proposals';
 COMMENT ON TABLE votos IS 'Individual votes cast by deputies in voting sessions';
 COMMENT ON TABLE estatisticas_deputados IS 'Voting statistics and analysis for each deputy';
 COMMENT ON TABLE cache_metadata IS 'Metadata for API response caching system';
+COMMENT ON TABLE fiscal_pessoas IS 'Public servants/politicians analyzed by fiscal investigation';
+COMMENT ON TABLE fiscal_registros_financeiros IS 'Normalized financial records from open data sources';
+COMMENT ON TABLE fiscal_resultados_analise IS 'Yearly analysis of net-worth growth compatibility';
 
 COMMENT ON COLUMN deputados.id IS 'Deputy ID from the Chamber API (matches the API response id field)';
 COMMENT ON COLUMN votos.voto IS 'Vote type: Sim, Não, Abstenção, Obstrução, Ausente';

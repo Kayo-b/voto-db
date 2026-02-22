@@ -12,7 +12,10 @@ from .model import (
     Voto,
     EstatisticaDeputado,
     Legislatura,
-    CacheMetadata
+    CacheMetadata,
+    FiscalPerson,
+    FiscalFinancialRecord,
+    FiscalAnalysisResult
 )
 
 from .connection import (
@@ -45,6 +48,9 @@ __all__ = [
     'EstatisticaDeputado',
     'Legislatura',
     'CacheMetadata',
+    'FiscalPerson',
+    'FiscalFinancialRecord',
+    'FiscalAnalysisResult',
     
     # Connection
     'engine',
