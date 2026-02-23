@@ -104,10 +104,9 @@ const DeputadoSearch: React.FC<DeputadoSearchProps> = ({
           </p>
           <div className="grid gap-3">
             {searchResults.map((dep) => (
-              <button
+              <div
                 key={dep.id}
-                onClick={() => onSelectDeputado(dep)}
-                className="card-hover p-4 text-left w-full group"
+                className="card-hover p-4 group"
               >
                 <div className="flex items-center gap-4">
                   {dep.urlFoto ? (
@@ -141,7 +140,15 @@ const DeputadoSearch: React.FC<DeputadoSearchProps> = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
-              </button>
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => onSelectDeputado(dep)}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    Mais detalhes
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>

@@ -1,0 +1,4 @@
+[   92252ms] [ERROR] Erro ao buscar votos recentes do deputado: JSHandle@object @ http://127.0.0.1:3000/static/js/bundle.js:31773
+[   92253ms] [ERROR] Erro ao carregar atividade: JSHandle@object @ http://127.0.0.1:3000/static/js/bundle.js:28842
+[   92253ms] [ERROR] Erro ao buscar votos recentes do deputado: JSHandle@object @ http://127.0.0.1:3000/static/js/bundle.js:31773
+[   92254ms] [ERROR] Erro ao carregar atividade: JSHandle@object @ http://127.0.0.1:3000/static/js/bundle.js:28842

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Deputado, AnaliseDeputado } from '../types/api';
+import { Deputado, DeputadoVotoAtividade } from '../types/api';
 
 interface DeputadoDetailsProps {
   deputado: Deputado;
@@ -8,46 +8,82 @@ interface DeputadoDetailsProps {
 }
 
 const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) => {
-  const [analise, setAnalise] = useState<AnaliseDeputado | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const PAGE_SIZE = 5;
+  const [atividades, setAtividades] = useState<DeputadoVotoAtividade[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [source, setSource] = useState<'db' | 'db_enriched' | null>(null);
+  const [enrichmentInfo, setEnrichmentInfo] = useState<string>('');
 
   useEffect(() => {
     const controller = new AbortController();
-    
-    const fetchAnalise = async (): Promise<void> => {
-      setLoading(true);
+
+    const fetchAtividadeInicial = async (): Promise<void> => {
+      setLoadingInitial(true);
       setError('');
+      setAtividades([]);
+      setHasMore(false);
+      setSource(null);
+      setEnrichmentInfo('');
+
       try {
-        const response = await api.analisarDeputado(deputado.id, false, controller.signal);
-       console.log('DeputadoDetails is RUnning') 
+        const response = await api.getDeputadoVotosRecentes(deputado.id, PAGE_SIZE, 0);
+
         if (response.success) {
-          setAnalise(response.data || null);
+          setAtividades(response.data || []);
+          setHasMore(Boolean(response.pagination?.has_more));
+          setSource(response.source || null);
+
+          const matched = response.enrichment?.matched_votacoes_for_deputado || 0;
+          const newVotos = response.enrichment?.new_votos_stored || 0;
+          if (matched > 0 || newVotos > 0) {
+            setEnrichmentInfo(`${newVotos} votos salvos no banco local (${matched} votações do deputado encontradas nesta varredura).`);
+          }
         } else {
-          setError(response.message || 'Não foi possível carregar a análise do deputado. Dados podem não estar disponíveis.');
-          setAnalise(null);
+          setError('Não foi possível carregar a atividade de votação do deputado.');
         }
       } catch (error) {
-        // Only show error if request wasn't cancelled
         if ((error as any)?.name !== 'CanceledError') {
-          console.error('Error fetching analysis:', error);
+          console.error('Erro ao carregar atividade:', error);
           setError('Erro na conexão. Tente novamente mais tarde.');
-          setAnalise(null);
         }
       }
-      
+
       if (!controller.signal.aborted) {
-        setLoading(false);
+        setLoadingInitial(false);
       }
     };
 
-    fetchAnalise();
-    
-    // Cleanup function to cancel the request
+    fetchAtividadeInicial();
+
     return () => {
       controller.abort();
     };
   }, [deputado.id]);
+
+  const carregarMais = async (): Promise<void> => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    setError('');
+
+    try {
+      const response = await api.getDeputadoVotosRecentes(deputado.id, PAGE_SIZE, atividades.length);
+      if (response.success) {
+        setAtividades((prev) => [...prev, ...(response.data || [])]);
+        setHasMore(Boolean(response.pagination?.has_more));
+      } else {
+        setError('Não foi possível carregar mais votações.');
+      }
+    } catch (err) {
+      console.error('Erro ao carregar mais votações:', err);
+      setError('Erro ao carregar mais votações.');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const getVotoColor = (voto: string): string => {
     switch (voto.toLowerCase()) {
@@ -58,17 +94,6 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
         return 'text-red-600 bg-red-100';
       case 'abstenção':
       case 'abstencao':
-        return 'text-yellow-600 bg-yellow-100';
-      default:
-        return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getRelevanciaColor = (relevancia: string): string => {
-    switch (relevancia) {
-      case 'alta':
-        return 'text-red-600 bg-red-100';
-      case 'média':
         return 'text-yellow-600 bg-yellow-100';
       default:
         return 'text-gray-600 bg-gray-100';
@@ -111,15 +136,29 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
       </div>
             
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-2xl font-bold mb-2">Votações em Proposições Relevantes</h2>
+        <h2 className="text-2xl font-bold mb-2">Atividade Recente de Votação</h2>
         <p className="text-gray-600 text-sm mb-4">
-          Histórico de votações do deputado em proposições de alta relevância social e política
+          Últimas proposições votadas pelo deputado, com cache local incremental para consultas mais rápidas.
         </p>
-        
-        {loading && (
+
+        {source && (
+          <div className="mb-4">
+            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${source === 'db' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+              {source === 'db' ? 'Dados do banco local' : 'Dados do banco local + API'}
+            </span>
+          </div>
+        )}
+
+        {enrichmentInfo && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 text-sm">
+            {enrichmentInfo}
+          </div>
+        )}
+
+        {loadingInitial && (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando votações relevantes...</p>
+            <p className="mt-4 text-gray-600">Escaneando atividade de votação...</p>
           </div>
         )}
 
@@ -128,72 +167,37 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
             <p className="font-semibold">ℹ️ Informação</p>
             <p>{error}</p>
             <p className="text-sm mt-2">
-              As votações são baseadas em proposições pré-selecionadas de alta relevância. 
-              Dados podem não estar disponíveis para todos os deputados.
+              A coleta depende da disponibilidade da API e do histórico já indexado localmente.
             </p>
           </div>
         )}
 
-        {/* Statistics Section */}
-        {!loading && analise && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Estatísticas de Votação</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-white rounded">
-                <div className="text-lg font-bold text-gray-800">
-                  {analise.estatisticas.total_votacoes_analisadas}
-                </div>
-                <div className="text-sm text-gray-600">Total Analisadas</div>
-              </div>
-              <div className="text-center p-3 bg-white rounded">
-                <div className="text-lg font-bold text-blue-600">
-                  {analise.estatisticas.presenca_percentual}%
-                </div>
-                <div className="text-sm text-gray-600">Presença</div>
-              </div>
-              <div className="text-center p-3 bg-white rounded">
-                <div className="text-lg font-bold text-green-600">
-                  {analise.estatisticas.votos_favoraveis}
-                </div>
-                <div className="text-sm text-gray-600">Votos Favoráveis</div>
-              </div>
-              <div className="text-center p-3 bg-white rounded">
-                <div className="text-lg font-bold text-red-600">
-                  {analise.estatisticas.votos_contrarios}
-                </div>
-                <div className="text-sm text-gray-600">Votos Contrários</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!loading && !error && (!analise || analise.historico_votacoes.length === 0) && (
+        {!loadingInitial && !error && atividades.length === 0 && (
           <div className="text-center py-8">
             <p className="text-gray-500 mb-2">
-              Não há registros de votações deste deputado nas proposições relevantes analisadas.
+              Nenhuma atividade de votação encontrada para este deputado.
             </p>
             <p className="text-gray-400 text-sm">
-              Isso pode ocorrer se o deputado não participou das votações principais ou 
-              se os dados ainda não foram processados.
+              Isso pode ocorrer quando não há votos recentes já indexados ou quando a API não retornou registros no período escaneado.
             </p>
           </div>
         )}
 
-        {!loading && analise && analise.historico_votacoes.length > 0 && (
+        {!loadingInitial && atividades.length > 0 && (
           <div className="space-y-4">
-            {analise.historico_votacoes.slice(0, 10).map((votacao, index) => (
+            {atividades.map((votacao, index) => (
               <div
                 key={index}
                 className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{votacao.proposicao}</h3>
+                    <h3 className="font-semibold text-lg">{votacao.proposicao_codigo}</h3>
                     <p className="text-gray-700">{votacao.titulo}</p>
                   </div>
                   <div className="flex gap-2">
-                    <span className={`px-2 py-1 rounded-full text-sm font-medium ${getRelevanciaColor(votacao.relevancia)}`}>
-                      {votacao.relevancia}
+                    <span className="px-2 py-1 rounded-full text-xs font-medium text-slate-700 bg-slate-100">
+                      {votacao.sigla_orgao || 'ORG'}
                     </span>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${getVotoColor(votacao.voto)}`}>
                       {votacao.voto}
@@ -206,11 +210,17 @@ const DeputadoDetails: React.FC<DeputadoDetailsProps> = ({ deputado, onBack }) =
                 </div>
               </div>
             ))}
-            
-            {analise.historico_votacoes.length > 10 && (
-              <p className="text-center text-gray-500 mt-4">
-                Mostrando 10 de {analise.historico_votacoes.length} votações
-              </p>
+
+            {hasMore && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={carregarMais}
+                  disabled={loadingMore}
+                  className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:bg-blue-300"
+                >
+                  {loadingMore ? 'Carregando...' : 'Carregar mais'}
+                </button>
+              </div>
             )}
           </div>
         )}

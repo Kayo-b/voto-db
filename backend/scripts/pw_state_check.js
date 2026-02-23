@@ -1,0 +1,20 @@
+const fs = require('fs');
+const { firefox } = require('playwright');
+(async () => {
+  const state = process.env.TWITTER_STORAGE_STATE_PATH || 'playwright/.auth/twitter-bot.json';
+  console.log('state_exists', fs.existsSync(state));
+  const browser = await firefox.launch({ headless: true });
+  const context = await browser.newContext(fs.existsSync(state) ? { storageState: state } : {});
+  const page = await context.newPage();
+  await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForTimeout(3000);
+  const url = page.url();
+  const hasComposer = await page.locator('[data-testid="tweetTextarea_0"], [data-testid="SideNav_NewTweet_Button"]').first().isVisible().catch(() => false);
+  const hasLoginPrompt = await page.getByText(/sign in to x/i).first().isVisible().catch(() => false);
+  const hasRetry = await page.getByText(/something went wrong/i).first().isVisible().catch(() => false);
+  const hasCouldNotLogin = await page.getByText(/could not log you in now/i).first().isVisible().catch(() => false);
+  const shot = `output/playwright/state-check-${Date.now()}.png`;
+  await page.screenshot({ path: shot, fullPage: true });
+  console.log(JSON.stringify({url, hasComposer, hasLoginPrompt, hasRetry, hasCouldNotLogin, shot}));
+  await browser.close();
+})();

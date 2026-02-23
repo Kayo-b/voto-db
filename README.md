@@ -148,6 +148,45 @@ O sistema identifica automaticamente as votações mais importantes usando:
 
 ### Scripts Úteis
 
+#### Configurar bot no X (Playwright, sem API paga)
+```bash
+# Na raiz do projeto
+npm install
+
+# Abre navegador para login manual e salva sessao autenticada
+TWITTER_STORAGE_STATE_PATH=playwright/.auth/twitter-bot.json npm run twitter:auth
+```
+
+Variaveis de ambiente do backend (`backend/.env`):
+```bash
+TWITTER_BOT_ENABLED=true
+TWITTER_BOT_HEADLESS=true
+TWITTER_BOT_BROWSER=firefox
+TWITTER_BOT_BROWSER_EXECUTABLE=/usr/bin/firefox
+TWITTER_BOT_USER_DATA_DIR=playwright/.auth/twitter-bot-profile
+TWITTER_STORAGE_STATE_PATH=playwright/.auth/twitter-bot.json
+TWITTER_BOT_RUNNER="npx --yes --package=playwright node"
+TWITTER_BOT_TIMEOUT_SECONDS=120
+TWITTER_BOT_MAX_VOTER_PREVIEW=5
+```
+
+Opcional (fallback quando a sessao expirar e for preciso login automatico):
+```bash
+TWITTER_USERNAME=seu_usuario
+TWITTER_PASSWORD=sua_senha
+TWITTER_EMAIL=seu_email_ou_telefone_de_confirmacao
+```
+
+Teste manual do post automatizado:
+```bash
+TWITTER_POST_TEXT="Teste automatico do VotoDB" npm run twitter:post:test
+```
+
+Com `TWITTER_BOT_ENABLED=true`, cada nova votacao com votos individuais armazenados aciona um post automatico com:
+- Projeto votado (codigo + titulo)
+- Resultado e placar
+- Quem votou (amostra compacta)
+
 #### Executar Demo
 ```bash
 cd backend
