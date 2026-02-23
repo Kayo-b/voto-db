@@ -34,7 +34,11 @@ from database.fiscal_investigation_service import (
     sync_portal_transparencia_servidores_remuneracao,
     sync_portal_transparencia_emendas,
     sync_camara_deputados_expenses,
+    sync_senado_ceaps_expenses,
     sync_pncp_contracts,
+    sync_portal_sanctions,
+    sync_pgfn_divida_ativa_from_csv_url,
+    sync_sicaf_habilitacao_from_csv_url,
     sync_tse_donations_from_csv_url,
     sync_tse_assets_from_csv_url,
     sync_tse_candidates_from_csv_url,
@@ -172,11 +176,39 @@ class FiscalCamaraExpensesSyncRequest(BaseModel):
     max_paginas_despesas_por_deputado: int = 10
 
 
+class FiscalSenadoExpensesSyncRequest(BaseModel):
+    ano: Optional[int] = None
+    max_senadores: int = 100
+    max_linhas: int = 500000
+    csv_url: Optional[str] = None
+
+
 class FiscalPncpContractsSyncRequest(BaseModel):
     data_inicial: str  # YYYYMMDD
     data_final: str    # YYYYMMDD
     max_paginas: int = 5
     tamanho_pagina: int = 50
+
+
+class FiscalSanctionsSyncRequest(BaseModel):
+    cadastro: str = "ceis"  # ceis|cnep|ceaf|cepim
+    max_paginas: int = 5
+    pagina_inicial: int = 1
+    match_only_existing: bool = True
+
+
+class FiscalPgfnSyncRequest(BaseModel):
+    csv_url: str
+    ano: Optional[int] = None
+    max_linhas: int = 200000
+    match_only_existing: bool = True
+
+
+class FiscalSicafSyncRequest(BaseModel):
+    csv_url: str
+    ano: Optional[int] = None
+    max_linhas: int = 200000
+    match_only_existing: bool = True
 
 
 class FiscalTseAutoSyncRequest(BaseModel):
@@ -297,6 +329,15 @@ def _run_fiscal_sync_cycle() -> Dict[str, Any]:
                 max_paginas_despesas_por_deputado=int(os.getenv("FISCAL_SYNC_CAMARA_MAX_PAGINAS_DESPESAS", "10")),
             )
 
+        if os.getenv("ENABLE_SENADO_EXPENSES_SYNC", "false").lower() == "true":
+            result["connectors"]["senado_ceaps"] = sync_senado_ceaps_expenses(
+                db=db,
+                ano=int(os.getenv("FISCAL_SYNC_SENADO_ANO", str(ano))),
+                max_senadores=int(os.getenv("FISCAL_SYNC_SENADO_MAX_SENADORES", "100")),
+                max_linhas=int(os.getenv("FISCAL_SYNC_SENADO_MAX_LINHAS", "500000")),
+                csv_url=os.getenv("SENADO_CEAPS_CSV_URL"),
+            )
+
         if os.getenv("ENABLE_PNCP_CONTRACTS_SYNC", "false").lower() == "true":
             result["connectors"]["pncp_contratos"] = sync_pncp_contracts(
                 db=db,
@@ -304,6 +345,41 @@ def _run_fiscal_sync_cycle() -> Dict[str, Any]:
                 data_final=os.getenv("FISCAL_SYNC_PNCP_DATA_FINAL", now.strftime("%Y%m%d")),
                 max_paginas=int(os.getenv("FISCAL_SYNC_PNCP_MAX_PAGINAS", "5")),
                 tamanho_pagina=int(os.getenv("FISCAL_SYNC_PNCP_TAMANHO_PAGINA", "50")),
+            )
+
+        if os.getenv("ENABLE_SANCTIONS_SYNC", "false").lower() == "true":
+            sanctions_list = os.getenv("FISCAL_SANCTIONS_CADASTROS", "ceis,cnep,ceaf,cepim")
+            for cadastro in [s.strip().lower() for s in sanctions_list.split(",") if s.strip()]:
+                connector_key = f"sanctions_{cadastro}"
+                try:
+                    result["connectors"][connector_key] = sync_portal_sanctions(
+                        db=db,
+                        cadastro=cadastro,
+                        max_paginas=int(os.getenv("FISCAL_SYNC_SANCTIONS_MAX_PAGINAS", "3")),
+                        pagina_inicial=int(os.getenv("FISCAL_SYNC_SANCTIONS_PAGINA_INICIAL", "1")),
+                        match_only_existing=os.getenv("FISCAL_SYNC_SANCTIONS_MATCH_ONLY_EXISTING", "true").lower() == "true",
+                    )
+                except Exception as exc:
+                    result["connectors"][connector_key] = {"error": str(exc)}
+
+        pgfn_csv_url = os.getenv("PGFN_DIVIDA_CSV_URL")
+        if pgfn_csv_url:
+            result["connectors"]["pgfn_divida_ativa"] = sync_pgfn_divida_ativa_from_csv_url(
+                db=db,
+                csv_url=pgfn_csv_url,
+                ano=int(os.getenv("FISCAL_SYNC_PGFN_ANO", str(ano))),
+                max_linhas=int(os.getenv("FISCAL_SYNC_PGFN_MAX_LINHAS", "200000")),
+                match_only_existing=os.getenv("FISCAL_SYNC_PGFN_MATCH_ONLY_EXISTING", "true").lower() == "true",
+            )
+
+        sicaf_csv_url = os.getenv("SICAF_HABILITACAO_CSV_URL")
+        if sicaf_csv_url:
+            result["connectors"]["sicaf_habilitacao"] = sync_sicaf_habilitacao_from_csv_url(
+                db=db,
+                csv_url=sicaf_csv_url,
+                ano=int(os.getenv("FISCAL_SYNC_SICAF_ANO", str(ano))),
+                max_linhas=int(os.getenv("FISCAL_SYNC_SICAF_MAX_LINHAS", "200000")),
+                match_only_existing=os.getenv("FISCAL_SYNC_SICAF_MATCH_ONLY_EXISTING", "true").lower() == "true",
             )
 
         # Connector 3: TSE donations CSV/ZIP (optional env)
@@ -2023,6 +2099,87 @@ async def fiscal_sync_camara_expenses(payload: FiscalCamaraExpensesSyncRequest, 
         raise HTTPException(status_code=400, detail=str(exc))
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao consultar despesas da Câmara: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/senado-expenses")
+async def fiscal_sync_senado_expenses(payload: FiscalSenadoExpensesSyncRequest, db: Session = Depends(get_database)):
+    ano = payload.ano or datetime.now().year
+    if payload.max_senadores <= 0:
+        raise HTTPException(status_code=400, detail="'max_senadores' deve ser maior que zero")
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_senado_ceaps_expenses(
+            db=db,
+            ano=ano,
+            max_senadores=payload.max_senadores,
+            max_linhas=payload.max_linhas,
+            csv_url=payload.csv_url,
+        )
+        return {"success": True, "connector": "senado_ceaps", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar despesas do Senado CEAPS: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/sanctions")
+async def fiscal_sync_sanctions(payload: FiscalSanctionsSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_paginas <= 0:
+        raise HTTPException(status_code=400, detail="'max_paginas' deve ser maior que zero")
+    if payload.pagina_inicial <= 0:
+        raise HTTPException(status_code=400, detail="'pagina_inicial' deve ser maior que zero")
+    try:
+        result = sync_portal_sanctions(
+            db=db,
+            cadastro=payload.cadastro.lower().strip(),
+            max_paginas=payload.max_paginas,
+            pagina_inicial=payload.pagina_inicial,
+            match_only_existing=payload.match_only_existing,
+        )
+        return {"success": True, "connector": f"sanctions_{payload.cadastro.lower().strip()}", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar sanções no Portal da Transparência: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/pgfn-debts")
+async def fiscal_sync_pgfn_debts(payload: FiscalPgfnSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_pgfn_divida_ativa_from_csv_url(
+            db=db,
+            csv_url=payload.csv_url,
+            ano=payload.ano,
+            max_linhas=payload.max_linhas,
+            match_only_existing=payload.match_only_existing,
+        )
+        return {"success": True, "connector": "pgfn_divida_ativa_csv", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de dívida ativa/PGFN: {str(exc)}")
+
+
+@app.post("/fiscal-investigation/sync/sicaf")
+async def fiscal_sync_sicaf(payload: FiscalSicafSyncRequest, db: Session = Depends(get_database)):
+    if payload.max_linhas <= 0:
+        raise HTTPException(status_code=400, detail="'max_linhas' deve ser maior que zero")
+    try:
+        result = sync_sicaf_habilitacao_from_csv_url(
+            db=db,
+            csv_url=payload.csv_url,
+            ano=payload.ano,
+            max_linhas=payload.max_linhas,
+            match_only_existing=payload.match_only_existing,
+        )
+        return {"success": True, "connector": "sicaf_habilitacao_csv", "result": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de habilitação/restrições SICAF: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/pncp-contracts")

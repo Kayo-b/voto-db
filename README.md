@@ -51,6 +51,16 @@ npm install axios --legacy-peer-deps
 
 ### Executar o Sistema
 
+#### Tudo em um comando (recomendado)
+```bash
+./run_app
+```
+
+O script:
+- inicializa o schema do banco automaticamente;
+- usa SQLite local (`sqlite:///./tmp/local_run.db`) quando `DATABASE_URL` não está definida;
+- sobe backend em `127.0.0.1:8001` e frontend em `127.0.0.1:3000`.
+
 #### Backend
 ```bash
 cd backend

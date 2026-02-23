@@ -72,6 +72,12 @@ export default function FiscalInvestigacao(): React.ReactElement {
   const [pncpDataFinal, setPncpDataFinal] = useState<string>(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
   const [pncpMaxPaginas, setPncpMaxPaginas] = useState<number>(3);
   const [pncpTamanhoPagina, setPncpTamanhoPagina] = useState<number>(50);
+  const [pgfnAno, setPgfnAno] = useState<number>(new Date().getFullYear());
+  const [pgfnCsvUrl, setPgfnCsvUrl] = useState<string>('');
+  const [pgfnMaxLinhas, setPgfnMaxLinhas] = useState<number>(200000);
+  const [sicafAno, setSicafAno] = useState<number>(new Date().getFullYear());
+  const [sicafCsvUrl, setSicafCsvUrl] = useState<string>('');
+  const [sicafMaxLinhas, setSicafMaxLinhas] = useState<number>(200000);
   const [anoDoacoes, setAnoDoacoes] = useState<number>(new Date().getFullYear());
   const [doacoesCsvUrl, setDoacoesCsvUrl] = useState<string>('');
   const [doacoesMaxLinhas, setDoacoesMaxLinhas] = useState<number>(50000);
@@ -198,6 +204,24 @@ export default function FiscalInvestigacao(): React.ReactElement {
       }
 
       try {
+        await api.syncSenadoExpenses({
+          ano: anoCamaraDespesas,
+          maxSenadores: 100,
+          maxLinhas: 200000,
+        });
+      } catch (err: any) {
+        errors.push(`Senado CEAPS: ${err?.response?.data?.detail || err?.message || 'falha desconhecida'}`);
+      }
+
+      for (const cadastro of ['ceis', 'cnep', 'ceaf', 'cepim'] as const) {
+        try {
+          await api.syncSanctions({ cadastro, maxPaginas: 2, paginaInicial: 1, matchOnlyExisting: true });
+        } catch (err: any) {
+          errors.push(`Sanções ${cadastro.toUpperCase()}: ${err?.response?.data?.detail || err?.message || 'falha desconhecida'}`);
+        }
+      }
+
+      try {
         await api.syncPncpContracts({
           dataInicial: pncpDataInicial,
           dataFinal: pncpDataFinal,
@@ -206,6 +230,32 @@ export default function FiscalInvestigacao(): React.ReactElement {
         });
       } catch (err: any) {
         errors.push(`PNCP contratos: ${err?.response?.data?.detail || err?.message || 'falha desconhecida'}`);
+      }
+
+      if (pgfnCsvUrl.trim()) {
+        try {
+          await api.syncPgfnDebts({
+            csvUrl: pgfnCsvUrl.trim(),
+            ano: pgfnAno,
+            maxLinhas: pgfnMaxLinhas,
+            matchOnlyExisting: true,
+          });
+        } catch (err: any) {
+          errors.push(`PGFN dívida ativa: ${err?.response?.data?.detail || err?.message || 'falha desconhecida'}`);
+        }
+      }
+
+      if (sicafCsvUrl.trim()) {
+        try {
+          await api.syncSicaf({
+            csvUrl: sicafCsvUrl.trim(),
+            ano: sicafAno,
+            maxLinhas: sicafMaxLinhas,
+            matchOnlyExisting: true,
+          });
+        } catch (err: any) {
+          errors.push(`SICAF restrições: ${err?.response?.data?.detail || err?.message || 'falha desconhecida'}`);
+        }
       }
 
       if (doacoesCsvUrl.trim()) {
@@ -548,6 +598,12 @@ export default function FiscalInvestigacao(): React.ReactElement {
           <label className="space-y-1"><span className="text-slate-500">PNCP data final (YYYYMMDD)</span><input type="text" value={pncpDataFinal} onChange={(e) => setPncpDataFinal(e.target.value)} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
           <label className="space-y-1"><span className="text-slate-500">PNCP máx. páginas</span><input type="number" min={1} value={pncpMaxPaginas} onChange={(e) => setPncpMaxPaginas(Number(e.target.value || 1))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
           <label className="space-y-1"><span className="text-slate-500">PNCP tamanho página (&gt;=10)</span><input type="number" min={10} value={pncpTamanhoPagina} onChange={(e) => setPncpTamanhoPagina(Number(e.target.value || 10))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1"><span className="text-slate-500">Ano PGFN</span><input type="number" value={pgfnAno} onChange={(e) => setPgfnAno(Number(e.target.value || 0))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1 md:col-span-2"><span className="text-slate-500">URL CSV/ZIP PGFN dívida ativa</span><input type="text" value={pgfnCsvUrl} onChange={(e) => setPgfnCsvUrl(e.target.value)} placeholder="https://..." className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1"><span className="text-slate-500">Máx. linhas PGFN</span><input type="number" min={1} value={pgfnMaxLinhas} onChange={(e) => setPgfnMaxLinhas(Number(e.target.value || 1))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1"><span className="text-slate-500">Ano SICAF</span><input type="number" value={sicafAno} onChange={(e) => setSicafAno(Number(e.target.value || 0))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1 md:col-span-2"><span className="text-slate-500">URL CSV/ZIP SICAF habilitação</span><input type="text" value={sicafCsvUrl} onChange={(e) => setSicafCsvUrl(e.target.value)} placeholder="https://..." className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
+          <label className="space-y-1"><span className="text-slate-500">Máx. linhas SICAF</span><input type="number" min={1} value={sicafMaxLinhas} onChange={(e) => setSicafMaxLinhas(Number(e.target.value || 1))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
           <label className="space-y-1"><span className="text-slate-500">Ano doações</span><input type="number" value={anoDoacoes} onChange={(e) => setAnoDoacoes(Number(e.target.value || 0))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
           <label className="space-y-1 md:col-span-2"><span className="text-slate-500">URL CSV/ZIP doações TSE</span><input type="text" value={doacoesCsvUrl} onChange={(e) => setDoacoesCsvUrl(e.target.value)} placeholder="https://..." className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>
           <label className="space-y-1"><span className="text-slate-500">Máx. linhas doações</span><input type="number" min={1} value={doacoesMaxLinhas} onChange={(e) => setDoacoesMaxLinhas(Number(e.target.value || 1))} className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200" /></label>

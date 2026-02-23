@@ -32,19 +32,47 @@ Detectar crescimento patrimonial potencialmente incompatível com renda e fontes
 
 Esses parâmetros são configuráveis pela API.
 
+## Confiabilidade e observabilidade (implementado)
+- Retries com backoff para conectores HTTP (Portal, Câmara, PNCP e downloads TSE).
+- Falha parcial por página/fonte sem abortar a execução completa dos conectores.
+- Retorno de `falhas_requisicao` nos conectores de sincronização para auditoria operacional.
+- `GET /fiscal-investigation/overview` com bloco `cobertura`:
+  - `pessoas_com_registros`
+  - `pessoas_com_patrimonio`
+  - `pessoas_com_inflows`
+  - `pessoas_com_analise`
+  - `sem_dados`
+  - `minimo_sem_analise`
+- `GET /fiscal-investigation/people-ranking` agora inclui `motivo_nivel` para explicar a classificação.
+
 ## Endpoints implementados
 - `GET /fiscal-investigation/sources`
+- `GET /fiscal-investigation/source-domains`
+- `GET /fiscal-investigation/integrations/status`
 - `GET /fiscal-investigation/overview`
 - `POST /fiscal-investigation/person`
 - `POST /fiscal-investigation/records`
 - `POST /fiscal-investigation/sync/portal-transparencia`
 - `POST /fiscal-investigation/sync/public-financing`
+- `POST /fiscal-investigation/sync/camara-expenses`
+- `POST /fiscal-investigation/sync/senado-expenses`
+- `POST /fiscal-investigation/sync/sanctions`
+- `POST /fiscal-investigation/sync/pgfn-debts`
+- `POST /fiscal-investigation/sync/sicaf`
+- `POST /fiscal-investigation/sync/pncp-contracts`
 - `POST /fiscal-investigation/sync/donations`
+- `POST /fiscal-investigation/sync/assets`
+- `POST /fiscal-investigation/sync/candidates`
+- `POST /fiscal-investigation/sync/tse-auto`
 - `POST /fiscal-investigation/analyze`
 - `GET /fiscal-investigation/suspects`
 - `GET /fiscal-investigation/people-ranking`
 - `GET /fiscal-investigation/sync/status`
 - `POST /fiscal-investigation/demo-seed`
+
+### Nota de discovery TSE (CKAN)
+- O endpoint `POST /fiscal-investigation/sync/tse-auto` resolve automaticamente o pacote mais recente disponível para o ano solicitado.
+- Exemplo: ao solicitar `ano=2026`, o conector pode usar `candidatos-2024`/`prestacao-de-contas-eleitorais-2024` quando não houver pacote 2026.
 
 ### Requisito de autenticação (Portal da Transparência)
 - Definir `PORTAL_TRANSPARENCIA_API_KEY` no backend.

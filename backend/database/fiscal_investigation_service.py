@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 import csv
+from collections import defaultdict
 import hashlib
 import io
 import os
@@ -83,6 +84,7 @@ OPEN_DATA_SOURCES: List[Dict[str, Any]] = [
 
 PORTAL_TRANSPARENCIA_BASE_URL = "https://api.portaldatransparencia.gov.br/api-de-dados"
 TSE_CKAN_BASE_URL = "https://dadosabertos.tse.jus.br/api/3/action"
+SENADO_CEAPS_CSV_TEMPLATE = "https://www.senado.leg.br/transparencia/LAI/verba/despesa_ceaps_{ano}.csv"
 
 SOURCE_DOMAINS: Dict[str, List[str]] = {
     "Corporate/Financial": [
@@ -145,6 +147,12 @@ def _safe_cpf_hash(cpf: Optional[str]) -> Optional[str]:
     return hashlib.sha256(digits.encode("utf-8")).hexdigest()
 
 
+def _looks_like_sha256_hash(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    return bool(re.fullmatch(r"[0-9a-f]{64}", str(value)))
+
+
 def _possible_cpf_hashes(cpf: str) -> List[str]:
     raw = _cpf_hash(cpf)
     return [
@@ -168,16 +176,18 @@ def get_integration_status() -> Dict[str, Any]:
         {"id": "portal_remuneracao", "source": "Portal da Transparência", "status": "implemented"},
         {"id": "portal_emendas", "source": "Portal da Transparência", "status": "implemented"},
         {"id": "camara_cota_parlamentar", "source": "Câmara dos Deputados", "status": "implemented"},
+        {"id": "senado_ceaps", "source": "Senado CEAPS", "status": "implemented"},
         {"id": "pncp_contratos", "source": "PNCP/ComprasNet", "status": "implemented"},
+        {"id": "ceis_cnep_ceaf_cepim", "source": "CGU sanções", "status": "implemented"},
+        {"id": "pgfn_divida_ativa_csv", "source": "PGFN", "status": "implemented"},
+        {"id": "sicaf_habilitacao_csv", "source": "SICAF", "status": "implemented"},
         {"id": "tse_doacoes_csv", "source": "TSE Doações", "status": "implemented"},
         {"id": "tse_bens_csv", "source": "TSE Bens Declarados", "status": "implemented"},
         {"id": "tse_candidaturas_csv", "source": "TSE Candidaturas", "status": "implemented"},
     ]
     high_impact_pending = [
-        {"id": "ceis_cnep_ceaf", "source": "CGU sanções", "reason": "compliance e risco contratual"},
-        {"id": "pgfn_divida_ativa", "source": "PGFN", "reason": "necessário para padrão P08"},
-        {"id": "sicaf_habilitacao", "source": "SICAF", "reason": "necessário para padrão P08"},
-        {"id": "senado_despesas", "source": "Senado", "reason": "completar renda/despesa parlamentar"},
+        {"id": "beneficiario_final_qsa", "source": "Receita CNPJ/QSA", "reason": "necessário para vínculo PJ→PF em P04/P08"},
+        {"id": "pncp_itens_participantes", "source": "PNCP detalhado", "reason": "aprofundar P06 com granularidade de adjudicação"},
     ]
     return {
         "implemented_count": len(implemented),
@@ -262,9 +272,14 @@ def upsert_person(db: Session, payload: Dict[str, Any]) -> FiscalPerson:
             existing_same_hash = db.query(FiscalPerson).filter(FiscalPerson.cpf_hash == payload["cpf_hash"]).first()
             if existing_same_hash and existing_same_hash.id != person.id:
                 person = existing_same_hash
-            elif not person.cpf_hash:
-                person.cpf_hash = payload["cpf_hash"]
-            elif person.cpf_hash.startswith(("autor_emenda:", "nome:", "tse:")) and not payload["cpf_hash"].startswith(("autor_emenda:", "nome:", "tse:")):
+            elif (
+                not person.cpf_hash
+                or (not _looks_like_sha256_hash(person.cpf_hash))
+                or (
+                    person.cpf_hash.startswith(("autor_emenda:", "nome:", "tse:"))
+                    and not payload["cpf_hash"].startswith(("autor_emenda:", "nome:", "tse:"))
+                )
+            ):
                 person.cpf_hash = payload["cpf_hash"]
         person.ativo = payload.get("ativo", person.ativo)
         person.metadata_json = _merge_metadata(person.metadata_json, payload.get("metadata_json"))
@@ -341,6 +356,62 @@ def _month_date_from_mes_ano(mes_ano: int) -> datetime:
     return datetime(year, month, 1)
 
 
+def _parse_date_flexible(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"sem informação", "sem informacao", "null", "none"}:
+        return None
+
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%Y%m%d", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_year(value: Any, fallback_year: int) -> int:
+    date_val = _parse_date_flexible(value)
+    if date_val:
+        return int(date_val.year)
+    text = str(value or "").strip()
+    match = re.search(r"(19|20)\d{2}", text)
+    if match:
+        try:
+            return int(match.group(0))
+        except ValueError:
+            return fallback_year
+    return fallback_year
+
+
+def _csv_reader_from_text(text: str) -> csv.DictReader:
+    sample = text[:4096]
+    delimiter = ";"
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,|\t")
+        delimiter = dialect.delimiter
+    except Exception:
+        delimiter = ";" if sample.count(";") >= sample.count(",") else ","
+    return csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+
+def _strip_senado_ceaps_preamble(text: str) -> str:
+    """
+    CEAPS CSV starts with a metadata line:
+    ULTIMA ATUALIZACAO;DD/MM/YYYY HH:MM
+    followed by the actual header row.
+    """
+    lines = text.splitlines()
+    if not lines:
+        return text
+    first = lines[0].strip().lower()
+    normalized = first.replace('"', "").replace("'", "")
+    if normalized.startswith("ultima atualizacao;") or normalized.startswith("última atualização;"):
+        return "\n".join(lines[1:])
+    return text
+
+
 def _upsert_financial_record(
     db: Session,
     person_id: int,
@@ -392,11 +463,16 @@ def _http_get_with_retry(
     timeout: int = 30,
     retries: int = 3,
     retry_sleep_seconds: float = 1.0,
+    retry_statuses: Optional[List[int]] = None,
 ) -> requests.Response:
     last_exc: Optional[Exception] = None
+    statuses = set(retry_statuses or [429, 500, 502, 503, 504])
     for attempt in range(1, retries + 1):
         try:
             resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+            if resp.status_code in statuses and attempt < retries:
+                time.sleep(retry_sleep_seconds * attempt)
+                continue
             return resp
         except requests.RequestException as exc:
             last_exc = exc
@@ -417,6 +493,16 @@ def _risk_level(score: float) -> str:
     if score >= 20:
         return "BAIXO"
     return "MINIMO"
+
+
+def _find_existing_person(db: Session, nome: Optional[str], cpf_hash: Optional[str]) -> Optional[FiscalPerson]:
+    if cpf_hash:
+        person = db.query(FiscalPerson).filter(FiscalPerson.cpf_hash == cpf_hash, FiscalPerson.ativo.is_(True)).first()
+        if person:
+            return person
+    if nome:
+        return _resolve_person_by_name(db=db, nome=nome)
+    return None
 
 
 def sync_portal_transparencia_servidores_remuneracao(
@@ -440,6 +526,7 @@ def sync_portal_transparencia_servidores_remuneracao(
     ingested_people = 0
     inserted_or_updated_records = 0
     remuneration_failures = 0
+    request_failures = 0
     page = pagina_inicial
     orgaos_page = pagina_inicial
     server_page_by_orgao: Dict[str, int] = {}
@@ -447,16 +534,36 @@ def sync_portal_transparencia_servidores_remuneracao(
 
     while ingested_people < max_servidores:
         # /servidores requires filter. We fetch available SIAPE organs first.
-        orgao_resp = requests.get(
-            f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores/por-orgao",
-            headers=headers,
-            params={"pagina": orgaos_page},
-            timeout=30,
-        )
+        try:
+            orgao_resp = _http_get_with_retry(
+                f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores/por-orgao",
+                headers=headers,
+                params={"pagina": orgaos_page},
+                timeout=30,
+                retries=3,
+            )
+        except requests.RequestException:
+            request_failures += 1
+            orgaos_page += 1
+            page += 1
+            continue
+
         if orgao_resp.status_code == 429:
             raise ValueError("Limite de requisições excedido no Portal da Transparência (HTTP 429)")
-        orgao_resp.raise_for_status()
-        orgaos = orgao_resp.json() or []
+        if orgao_resp.status_code >= 400:
+            request_failures += 1
+            orgaos_page += 1
+            page += 1
+            continue
+
+        try:
+            orgaos = orgao_resp.json() or []
+        except ValueError:
+            request_failures += 1
+            orgaos_page += 1
+            page += 1
+            continue
+
         if not orgaos:
             break
 
@@ -469,18 +576,29 @@ def sync_portal_transparencia_servidores_remuneracao(
                 continue
 
             server_page = server_page_by_orgao.get(orgao_codigo, 1)
-            servidores_resp = requests.get(
-                f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores",
-                headers=headers,
-                params={"pagina": server_page, "orgaoServidorExercicio": orgao_codigo},
-                timeout=30,
-            )
+            try:
+                servidores_resp = _http_get_with_retry(
+                    f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores",
+                    headers=headers,
+                    params={"pagina": server_page, "orgaoServidorExercicio": orgao_codigo},
+                    timeout=30,
+                    retries=3,
+                )
+            except requests.RequestException:
+                request_failures += 1
+                continue
+
             if servidores_resp.status_code == 429:
                 raise ValueError("Limite de requisições excedido no Portal da Transparência (HTTP 429)")
             if servidores_resp.status_code >= 400:
+                request_failures += 1
                 continue
 
-            servidores = servidores_resp.json() or []
+            try:
+                servidores = servidores_resp.json() or []
+            except ValueError:
+                request_failures += 1
+                continue
             if not servidores:
                 continue
 
@@ -521,12 +639,20 @@ def sync_portal_transparencia_servidores_remuneracao(
                     },
                 )
 
-                remun_resp = requests.get(
-                    f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores/remuneracao",
-                    headers=headers,
-                    params={"id": servidor_id, "mesAno": mes_ano, "pagina": 1},
-                    timeout=30,
-                )
+                try:
+                    remun_resp = _http_get_with_retry(
+                        f"{PORTAL_TRANSPARENCIA_BASE_URL}/servidores/remuneracao",
+                        headers=headers,
+                        params={"id": servidor_id, "mesAno": mes_ano, "pagina": 1},
+                        timeout=30,
+                        retries=3,
+                    )
+                except requests.RequestException:
+                    request_failures += 1
+                    remuneration_failures += 1
+                    ingested_people += 1
+                    continue
+
                 if remun_resp.status_code == 404:
                     remuneration_failures += 1
                     ingested_people += 1
@@ -534,11 +660,19 @@ def sync_portal_transparencia_servidores_remuneracao(
                 if remun_resp.status_code == 429:
                     raise ValueError("Limite de requisições excedido no Portal da Transparência (HTTP 429)")
                 if remun_resp.status_code >= 400:
+                    request_failures += 1
                     remuneration_failures += 1
                     ingested_people += 1
                     continue
 
-                remuneracoes = remun_resp.json() or []
+                try:
+                    remuneracoes = remun_resp.json() or []
+                except ValueError:
+                    request_failures += 1
+                    remuneration_failures += 1
+                    ingested_people += 1
+                    continue
+
                 total_remuneracao = Decimal("0")
                 for rem in remuneracoes:
                     itens = rem.get("remuneracoesDTO", []) or []
@@ -577,6 +711,7 @@ def sync_portal_transparencia_servidores_remuneracao(
         "processados": ingested_people,
         "registros_salario_upsert": inserted_or_updated_records,
         "falhas_remuneracao": remuneration_failures,
+        "falhas_requisicao": request_failures,
         "pagina_final": page - 1,
     }
 
@@ -600,18 +735,38 @@ def sync_portal_transparencia_emendas(
     pages_processed = 0
     people_touched = 0
     records_upserted = 0
+    request_failures = 0
 
     while pages_processed < max_paginas:
-        resp = requests.get(
-            f"{PORTAL_TRANSPARENCIA_BASE_URL}/emendas",
-            headers=headers,
-            params={"ano": ano, "pagina": page},
-            timeout=30,
-        )
+        try:
+            resp = _http_get_with_retry(
+                f"{PORTAL_TRANSPARENCIA_BASE_URL}/emendas",
+                headers=headers,
+                params={"ano": ano, "pagina": page},
+                timeout=30,
+                retries=3,
+            )
+        except requests.RequestException:
+            request_failures += 1
+            page += 1
+            pages_processed += 1
+            continue
+
         if resp.status_code == 429:
             raise ValueError("Limite de requisições excedido no Portal da Transparência (HTTP 429)")
-        resp.raise_for_status()
-        rows = resp.json() or []
+        if resp.status_code >= 400:
+            request_failures += 1
+            page += 1
+            pages_processed += 1
+            continue
+
+        try:
+            rows = resp.json() or []
+        except ValueError:
+            request_failures += 1
+            page += 1
+            pages_processed += 1
+            continue
         if not rows:
             break
 
@@ -670,6 +825,7 @@ def sync_portal_transparencia_emendas(
         "paginas_processadas": pages_processed,
         "pessoas_processadas": people_touched,
         "registros_financiamento_upsert": records_upserted,
+        "falhas_requisicao": request_failures,
         "pagina_final": page - 1,
     }
 
@@ -836,18 +992,31 @@ def sync_pncp_contracts(
     contratos_lidos = 0
     contratos_com_match = 0
     registros_upsert = 0
+    request_failures = 0
 
     for pagina in range(1, max_paginas + 1):
-        resp = _http_get_with_retry(
-            base_url,
-            params={**params_base, "pagina": pagina},
-            timeout=45,
-            retries=3,
-        )
+        try:
+            resp = _http_get_with_retry(
+                base_url,
+                params={**params_base, "pagina": pagina},
+                timeout=45,
+                retries=3,
+            )
+        except requests.RequestException:
+            request_failures += 1
+            continue
+
         if resp.status_code == 429:
             raise ValueError("Limite de requisições excedido no PNCP (HTTP 429)")
-        resp.raise_for_status()
-        payload = resp.json() or {}
+        if resp.status_code >= 400:
+            request_failures += 1
+            continue
+
+        try:
+            payload = resp.json() or {}
+        except ValueError:
+            request_failures += 1
+            continue
         rows = payload.get("data") or []
         if not rows:
             break
@@ -910,12 +1079,463 @@ def sync_pncp_contracts(
         "contratos_lidos": contratos_lidos,
         "contratos_com_match": contratos_com_match,
         "registros_renda_extra_upsert": registros_upsert,
+        "falhas_requisicao": request_failures,
+    }
+
+
+def sync_senado_ceaps_expenses(
+    db: Session,
+    ano: int,
+    max_senadores: int = 100,
+    max_linhas: int = 500000,
+    csv_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Connector: Senado CEAPS (cota parlamentar) via CSV público.
+    Agrega despesas reembolsadas por senador como sinal de financiamento público.
+    """
+    if max_senadores <= 0:
+        raise ValueError("'max_senadores' deve ser maior que zero")
+    if max_linhas <= 0:
+        raise ValueError("'max_linhas' deve ser maior que zero")
+
+    source_url = csv_url or SENADO_CEAPS_CSV_TEMPLATE.format(ano=ano)
+    resp = _http_get_with_retry(source_url, timeout=90, retries=3)
+    resp.raise_for_status()
+    text = _strip_senado_ceaps_preamble(_extract_csv_from_content(resp.content, source_url))
+    reader = _csv_reader_from_text(text)
+
+    processed = 0
+    skipped = 0
+    aggregates: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    by_name_key: Dict[str, str] = {}
+
+    for row in reader:
+        if processed >= max_linhas:
+            break
+        processed += 1
+
+        year_in_row = _extract_year(row.get("ANO"), fallback_year=ano)
+        if year_in_row != ano:
+            continue
+
+        nome = _pick_value(row, ["SENADOR", "SENADORA", "NOME_PARLAMENTAR", "NOME"])
+        if not nome:
+            skipped += 1
+            continue
+        valor = _parse_brl_value(_pick_value(row, ["VALOR_REEMBOLSADO", "VALOR", "VL_REEMBOLSO"]))
+        if valor <= 0:
+            skipped += 1
+            continue
+        name_key = _normalize_name_key(str(nome))
+        if not name_key:
+            skipped += 1
+            continue
+        aggregates[name_key] += valor
+        by_name_key[name_key] = str(nome).strip()
+
+    ordered = sorted(aggregates.items(), key=lambda item: item[1], reverse=True)[:max_senadores]
+    upserted = 0
+
+    for name_key, total in ordered:
+        nome = by_name_key[name_key]
+        person = upsert_person(
+            db,
+            {
+                "nome": nome,
+                "cpf_hash": None,
+                "cargo": "senador",
+                "orgao": "senado",
+                "ativo": True,
+                "metadata_json": {
+                    "origem": "senado_ceaps",
+                    "name_key": name_key,
+                },
+            },
+        )
+        _upsert_financial_record(
+            db=db,
+            person_id=person.id,
+            ano=ano,
+            tipo="financiamento_publico",
+            valor=total,
+            fonte="senado_ceaps",
+            fonte_url=source_url,
+            confianca=0.93,
+            extra_json={"origem": "ceaps", "ano": ano},
+            data_referencia=datetime(ano, 1, 1),
+        )
+        upserted += 1
+
+    db.commit()
+    return {
+        "ano": ano,
+        "url": source_url,
+        "linhas_processadas": processed,
+        "linhas_descartadas": skipped,
+        "senadores_processados": len(ordered),
+        "registros_financiamento_upsert": upserted,
+    }
+
+
+_PORTAL_SANCOES_ENDPOINTS: Dict[str, str] = {
+    "ceis": "ceis",
+    "cnep": "cnep",
+    "ceaf": "ceaf",
+    "cepim": "cepim",
+}
+
+
+def _extract_sanction_identity(row: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    sancionado = row.get("sancionado") if isinstance(row.get("sancionado"), dict) else {}
+    pessoa = row.get("pessoa") if isinstance(row.get("pessoa"), dict) else {}
+    pessoa_juridica = row.get("pessoaJuridica") if isinstance(row.get("pessoaJuridica"), dict) else {}
+    punicao = row.get("punicao") if isinstance(row.get("punicao"), dict) else {}
+
+    nome = (
+        sancionado.get("nome")
+        or pessoa.get("nome")
+        or pessoa_juridica.get("nome")
+        or punicao.get("nomePunido")
+    )
+    documento = (
+        sancionado.get("codigoFormatado")
+        or pessoa.get("cpfFormatado")
+        or pessoa.get("cnpjFormatado")
+        or pessoa_juridica.get("cpfFormatado")
+        or pessoa_juridica.get("cnpjFormatado")
+        or punicao.get("cpfPunidoFormatado")
+    )
+    return {
+        "nome": str(nome).strip() if nome else None,
+        "documento": str(documento).strip() if documento else None,
+    }
+
+
+def sync_portal_sanctions(
+    db: Session,
+    cadastro: str,
+    max_paginas: int = 5,
+    pagina_inicial: int = 1,
+    match_only_existing: bool = True,
+) -> Dict[str, Any]:
+    """
+    Connector: sanções CGU (CEIS/CNEP/CEAF/CEPIM) via Portal da Transparência.
+    Registra sinais de compliance por pessoa já presente no grafo investigativo.
+    """
+    if cadastro not in _PORTAL_SANCOES_ENDPOINTS:
+        raise ValueError(f"Cadastro inválido: {cadastro}. Use um de {sorted(_PORTAL_SANCOES_ENDPOINTS.keys())}")
+    if max_paginas <= 0:
+        raise ValueError("'max_paginas' deve ser maior que zero")
+
+    api_key = os.getenv("PORTAL_TRANSPARENCIA_API_KEY")
+    if not api_key:
+        raise ValueError("PORTAL_TRANSPARENCIA_API_KEY não configurada")
+
+    endpoint = _PORTAL_SANCOES_ENDPOINTS[cadastro]
+    headers = {"chave-api-dados": api_key}
+
+    rows_read = 0
+    matches = 0
+    paginas_processadas = 0
+    request_failures = 0
+    grouped: Dict[tuple[int, int], Dict[str, Any]] = {}
+
+    for page in range(pagina_inicial, pagina_inicial + max_paginas):
+        try:
+            resp = _http_get_with_retry(
+                f"{PORTAL_TRANSPARENCIA_BASE_URL}/{endpoint}",
+                headers=headers,
+                params={"pagina": page},
+                timeout=30,
+                retries=3,
+            )
+        except requests.RequestException:
+            request_failures += 1
+            continue
+
+        if resp.status_code == 429:
+            raise ValueError("Limite de requisições excedido no Portal da Transparência (HTTP 429)")
+        if resp.status_code >= 400:
+            request_failures += 1
+            continue
+
+        try:
+            rows = resp.json() or []
+        except ValueError:
+            request_failures += 1
+            continue
+        if not rows:
+            break
+        paginas_processadas += 1
+
+        for row in rows:
+            rows_read += 1
+            identity = _extract_sanction_identity(row)
+            cpf_hash = _safe_cpf_hash(identity.get("documento"))
+            person = _find_existing_person(db, identity.get("nome"), cpf_hash)
+            if not person and not match_only_existing and identity.get("nome"):
+                person = upsert_person(
+                    db,
+                    {
+                        "nome": identity["nome"],
+                        "cpf_hash": cpf_hash,
+                        "cargo": "entidade_sancionada",
+                        "orgao": "compliance",
+                        "ativo": True,
+                        "metadata_json": {"origem": f"portal_{cadastro}"},
+                    },
+                )
+
+            if not person:
+                continue
+
+            matches += 1
+            year = _extract_year(
+                row.get("dataInicioSancao")
+                or row.get("dataPublicacaoSancao")
+                or row.get("dataReferencia")
+                or row.get("dataPublicacao"),
+                fallback_year=datetime.now().year,
+            )
+            valor = _parse_brl_value(row.get("valorMulta"))
+            if valor <= 0:
+                valor = Decimal("1")
+
+            key = (person.id, year)
+            if key not in grouped:
+                grouped[key] = {"valor": Decimal("0"), "count": 0}
+            grouped[key]["valor"] += valor
+            grouped[key]["count"] += 1
+
+    upserted = 0
+    for (person_id, year), info in grouped.items():
+        _upsert_financial_record(
+            db=db,
+            person_id=person_id,
+            ano=year,
+            tipo=f"sancao_{cadastro}",
+            valor=info["valor"],
+            fonte=f"portal_{cadastro}",
+            fonte_url=f"{PORTAL_TRANSPARENCIA_BASE_URL}/{endpoint}",
+            confianca=0.9,
+            extra_json={"cadastro": cadastro, "ocorrencias": info["count"]},
+            data_referencia=datetime(year, 1, 1),
+        )
+        upserted += 1
+
+    db.commit()
+    return {
+        "cadastro": cadastro,
+        "paginas_processadas": paginas_processadas,
+        "registros_lidos": rows_read,
+        "matches_pessoas": matches,
+        "registros_upsert": upserted,
+        "falhas_requisicao": request_failures,
+        "match_only_existing": match_only_existing,
+    }
+
+
+def sync_pgfn_divida_ativa_from_csv_url(
+    db: Session,
+    csv_url: str,
+    ano: Optional[int] = None,
+    max_linhas: int = 200000,
+    match_only_existing: bool = True,
+) -> Dict[str, Any]:
+    """
+    Connector: dívida ativa (PGFN) a partir de CSV/ZIP público.
+    Requer URL explícita por ambiente, pois o formato/origem pode variar.
+    """
+    if max_linhas <= 0:
+        raise ValueError("'max_linhas' deve ser maior que zero")
+
+    resp = _http_get_with_retry(csv_url, timeout=90, retries=3)
+    resp.raise_for_status()
+    text = _extract_csv_from_content(resp.content, csv_url)
+    reader = _csv_reader_from_text(text)
+
+    default_year = int(ano or datetime.now().year)
+    processed = 0
+    matched = 0
+    grouped: Dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
+
+    for row in reader:
+        if processed >= max_linhas:
+            break
+        processed += 1
+
+        nome = _pick_value(
+            row,
+            ["NOME_DEVEDOR", "NM_DEVEDOR", "NOME", "RAZAO_SOCIAL", "NOME_CONTRIBUINTE", "DEVEDOR"],
+        )
+        documento = _pick_value(
+            row,
+            ["CPF_CNPJ", "NR_CPF_CNPJ", "CPF", "CNPJ", "DOCUMENTO", "NU_DOCUMENTO"],
+        )
+        cpf_hash = _safe_cpf_hash(documento)
+        person = _find_existing_person(db, nome, cpf_hash)
+        if not person and not match_only_existing and nome:
+            person = upsert_person(
+                db,
+                {
+                    "nome": str(nome).strip(),
+                    "cpf_hash": cpf_hash,
+                    "cargo": "devedor",
+                    "orgao": "pgfn",
+                    "ativo": True,
+                    "metadata_json": {"origem": "pgfn_divida_ativa_csv"},
+                },
+            )
+        if not person:
+            continue
+
+        year = _extract_year(
+            _pick_value(row, ["ANO", "AN_EXERCICIO", "DATA_INSCRICAO", "DATA", "DT_INSCRICAO"]),
+            fallback_year=default_year,
+        )
+        valor = _parse_brl_value(
+            _pick_value(
+                row,
+                ["VALOR_CONSOLIDADO", "VALOR_DIVIDA", "VALOR", "VALOR_TOTAL", "VL_DEBITO", "DEBITO"],
+            )
+        )
+        if valor <= 0:
+            valor = Decimal("1")
+
+        grouped[(person.id, year)] += valor
+        matched += 1
+
+    upserted = 0
+    for (person_id, year), valor_total in grouped.items():
+        _upsert_financial_record(
+            db=db,
+            person_id=person_id,
+            ano=year,
+            tipo="divida_ativa_pgfn",
+            valor=valor_total,
+            fonte="pgfn_divida_ativa_csv",
+            fonte_url=csv_url,
+            confianca=0.85,
+            extra_json={"origem": "pgfn_csv"},
+            data_referencia=datetime(year, 1, 1),
+        )
+        upserted += 1
+
+    db.commit()
+    return {
+        "url": csv_url,
+        "linhas_processadas": processed,
+        "linhas_com_match": matched,
+        "registros_divida_upsert": upserted,
+        "match_only_existing": match_only_existing,
+    }
+
+
+def sync_sicaf_habilitacao_from_csv_url(
+    db: Session,
+    csv_url: str,
+    ano: Optional[int] = None,
+    max_linhas: int = 200000,
+    match_only_existing: bool = True,
+) -> Dict[str, Any]:
+    """
+    Connector: status de habilitação/restrição SICAF a partir de CSV/ZIP.
+    Registra ocorrência de restrição por pessoa mapeada.
+    """
+    if max_linhas <= 0:
+        raise ValueError("'max_linhas' deve ser maior que zero")
+
+    resp = _http_get_with_retry(csv_url, timeout=90, retries=3)
+    resp.raise_for_status()
+    text = _extract_csv_from_content(resp.content, csv_url)
+    reader = _csv_reader_from_text(text)
+
+    default_year = int(ano or datetime.now().year)
+    processed = 0
+    matched = 0
+    grouped: Dict[tuple[int, int], int] = defaultdict(int)
+    blocked_status_tokens = ("irregular", "imped", "inidone", "suspens", "descredenc", "pendenc")
+
+    for row in reader:
+        if processed >= max_linhas:
+            break
+        processed += 1
+
+        nome = _pick_value(
+            row,
+            ["NOME_FORNECEDOR", "RAZAO_SOCIAL", "NOME", "FORNECEDOR", "NOME_PESSOA"],
+        )
+        documento = _pick_value(
+            row,
+            ["CPF_CNPJ", "NR_CPF_CNPJ", "CPF", "CNPJ", "DOCUMENTO", "NU_DOCUMENTO"],
+        )
+        status = str(
+            _pick_value(
+                row,
+                ["STATUS", "SITUACAO", "SITUACAO_HABILITACAO", "STATUS_HABILITACAO", "INDICADOR_RESTRICAO"],
+            )
+            or ""
+        ).strip()
+        status_norm = status.lower()
+        is_restricted = any(token in status_norm for token in blocked_status_tokens)
+        if status and not is_restricted:
+            continue
+
+        cpf_hash = _safe_cpf_hash(documento)
+        person = _find_existing_person(db, nome, cpf_hash)
+        if not person and not match_only_existing and nome:
+            person = upsert_person(
+                db,
+                {
+                    "nome": str(nome).strip(),
+                    "cpf_hash": cpf_hash,
+                    "cargo": "fornecedor",
+                    "orgao": "sicaf",
+                    "ativo": True,
+                    "metadata_json": {"origem": "sicaf_habilitacao_csv"},
+                },
+            )
+        if not person:
+            continue
+
+        year = _extract_year(
+            _pick_value(row, ["ANO", "DATA", "DT_REFERENCIA", "DATA_ATUALIZACAO"]),
+            fallback_year=default_year,
+        )
+        grouped[(person.id, year)] += 1
+        matched += 1
+
+    upserted = 0
+    for (person_id, year), count in grouped.items():
+        _upsert_financial_record(
+            db=db,
+            person_id=person_id,
+            ano=year,
+            tipo="restricao_sicaf",
+            valor=Decimal(str(count)),
+            fonte="sicaf_habilitacao_csv",
+            fonte_url=csv_url,
+            confianca=0.82,
+            extra_json={"ocorrencias": count},
+            data_referencia=datetime(year, 1, 1),
+        )
+        upserted += 1
+
+    db.commit()
+    return {
+        "url": csv_url,
+        "linhas_processadas": processed,
+        "linhas_com_match": matched,
+        "registros_restricao_upsert": upserted,
+        "match_only_existing": match_only_existing,
     }
 
 
 def _extract_csv_from_content(content: bytes, url: str) -> str:
     lower = url.lower()
-    if lower.endswith(".zip"):
+    is_zip = lower.endswith(".zip") or content[:2] == b"PK"
+    if is_zip:
         with zipfile.ZipFile(io.BytesIO(content)) as zf:
             csv_names = [name for name in zf.namelist() if name.lower().endswith(".csv")]
             if not csv_names:
@@ -938,6 +1558,8 @@ def _tse_package_show(package_id: str) -> Dict[str, Any]:
         timeout=45,
         retries=3,
     )
+    if resp.status_code == 404:
+        raise ValueError(f"Pacote TSE não encontrado: {package_id}")
     resp.raise_for_status()
     payload = resp.json() or {}
     if not payload.get("success") or not payload.get("result"):
@@ -945,17 +1567,140 @@ def _tse_package_show(package_id: str) -> Dict[str, Any]:
     return payload["result"]
 
 
+def _tse_package_show_optional(package_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        return _tse_package_show(package_id)
+    except Exception:
+        return None
+
+
+def _tse_package_search(query: str, rows: int = 50) -> List[Dict[str, Any]]:
+    resp = _http_get_with_retry(
+        f"{TSE_CKAN_BASE_URL}/package_search",
+        params={"q": query, "rows": rows},
+        timeout=45,
+        retries=3,
+    )
+    resp.raise_for_status()
+    payload = resp.json() or {}
+    if not payload.get("success"):
+        return []
+    return list((payload.get("result") or {}).get("results") or [])
+
+
+def _extract_year_from_text(value: Any) -> Optional[int]:
+    text = str(value or "")
+    match = re.search(r"(19|20)\d{2}", text)
+    if not match:
+        return None
+    try:
+        return int(match.group(0))
+    except ValueError:
+        return None
+
+
+def _tse_package_text(item: Dict[str, Any]) -> str:
+    return _normalize_name_key(f"{item.get('name') or ''} {item.get('title') or ''}")
+
+
+def _select_best_tse_package(
+    results: List[Dict[str, Any]],
+    target_year: int,
+    required_tokens: Optional[List[str]] = None,
+    forbidden_tokens: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    if not results:
+        return None
+
+    req = [_normalize_name_key(token) for token in (required_tokens or []) if token]
+    forbidden = [_normalize_name_key(token) for token in (forbidden_tokens or []) if token]
+    ranked: List[tuple[int, int, Dict[str, Any]]] = []
+    for item in results:
+        text = _tse_package_text(item)
+        if req and not all(token in text for token in req):
+            continue
+        name = str(item.get("name") or "")
+        title = str(item.get("title") or "")
+        year = _extract_year_from_text(name) or _extract_year_from_text(title) or 0
+        if year <= target_year:
+            year_distance = target_year - year
+            penalty = 0
+        else:
+            year_distance = year - target_year
+            penalty = 1000
+        semantic_penalty = 3000 if forbidden and any(token in text for token in forbidden) else 0
+        ranked.append((semantic_penalty + penalty + year_distance, -year, item))
+
+    if not ranked:
+        return None
+
+    ranked.sort(key=lambda it: (it[0], it[1]))
+    return ranked[0][2]
+
+
+def _resolve_tse_package_by_year_patterns(
+    target_year: int,
+    id_patterns: List[str],
+    min_year: int = 2008,
+) -> Optional[Dict[str, Any]]:
+    for year in range(target_year, min_year - 1, -1):
+        for pattern in id_patterns:
+            package_id = pattern.format(year=year)
+            pkg = _tse_package_show_optional(package_id)
+            if pkg:
+                return pkg
+    return None
+
+
+def _resolve_tse_package(
+    target_year: int,
+    exact_ids: List[str],
+    search_query: str,
+    required_tokens: Optional[List[str]] = None,
+    forbidden_tokens: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    for package_id in exact_ids:
+        pkg = _tse_package_show_optional(package_id)
+        if pkg:
+            return pkg
+
+    search_results = _tse_package_search(f"{search_query} {target_year}", rows=50)
+    selected = _select_best_tse_package(
+        search_results,
+        target_year,
+        required_tokens=required_tokens,
+        forbidden_tokens=forbidden_tokens,
+    )
+    if selected and selected.get("name"):
+        pkg = _tse_package_show_optional(str(selected["name"]))
+        if pkg:
+            return pkg
+
+    # Broader fallback for years without election package (e.g., 2026 for candidaturas).
+    broader = _tse_package_search(search_query, rows=100)
+    selected = _select_best_tse_package(
+        broader,
+        target_year,
+        required_tokens=required_tokens,
+        forbidden_tokens=forbidden_tokens,
+    )
+    if selected and selected.get("name"):
+        return _tse_package_show_optional(str(selected["name"]))
+    return None
+
+
 def _tse_find_resource_url(package: Dict[str, Any], name_contains: List[str]) -> Optional[str]:
+    normalized_tokens = [_normalize_name_key(token) for token in name_contains]
     resources = package.get("resources") or []
     for resource in resources:
-        name = str(resource.get("name") or "").lower()
+        name = _normalize_name_key(str(resource.get("name") or ""))
         fmt = str(resource.get("format") or "").lower()
         url = resource.get("url")
         if not url:
             continue
         if fmt not in ("csv", "txt", "zip"):
             continue
-        if all(token.lower() in name for token in name_contains):
+        if all(token in name for token in normalized_tokens):
             return str(url)
     return None
 
@@ -964,14 +1709,60 @@ def discover_tse_urls_for_year(ano: int) -> Dict[str, Optional[str]]:
     """
     Discover canonical TSE open-data resources for a given election year via CKAN.
     """
-    cand_package = _tse_package_show(f"candidatos-{ano}")
-    presta_package = _tse_package_show(f"prestacao-de-contas-eleitorais-{ano}")
+    cand_package = _resolve_tse_package_by_year_patterns(
+        target_year=ano,
+        id_patterns=[
+            "candidatos-{year}",
+            "candidatos-{year}-subtemas",
+        ],
+        min_year=2008,
+    )
+    if not cand_package:
+        cand_package = _resolve_tse_package(
+            target_year=ano,
+            exact_ids=[f"candidatos-{ano}"],
+            search_query="candidatos",
+            required_tokens=["candidatos"],
+            forbidden_tokens=["prestacao", "contas", "partidarias", "resultados"],
+        )
 
-    candidates_url = _tse_find_resource_url(cand_package, ["candidatos"])
-    assets_url = _tse_find_resource_url(cand_package, ["bens", "candidatos"])
-    donations_url = _tse_find_resource_url(presta_package, ["contas", "candidatos"])
+    presta_package = _resolve_tse_package_by_year_patterns(
+        target_year=ano,
+        id_patterns=[
+            "prestacao-de-contas-eleitorais-{year}",
+            "dadosabertos-tse-jus-br-dataset-prestacao-de-contas-eleitorais-{year}",
+        ],
+        min_year=2008,
+    )
+    if not presta_package:
+        presta_package = _resolve_tse_package(
+            target_year=ano,
+            exact_ids=[
+                f"prestacao-de-contas-eleitorais-{ano}",
+                f"dadosabertos-tse-jus-br-dataset-prestacao-de-contas-eleitorais-{ano}",
+            ],
+            search_query="prestacao de contas eleitorais",
+            required_tokens=["prestacao", "contas"],
+            forbidden_tokens=["partidarias"],
+        )
+
+    candidates_url = _tse_find_resource_url(cand_package or {}, ["candidatos"]) if cand_package else None
+    assets_url = _tse_find_resource_url(cand_package or {}, ["bens", "candidatos"]) if cand_package else None
+    donations_url = None
+    if presta_package:
+        donations_url = _tse_find_resource_url(presta_package, ["prestacao", "contas", "candidatos"])
+        if not donations_url:
+            donations_url = _tse_find_resource_url(presta_package, ["candidatos"])
+
+    resolved_candidates_year = _extract_year_from_text((cand_package or {}).get("name"))
+    resolved_donations_year = _extract_year_from_text((presta_package or {}).get("name"))
 
     return {
+        "requested_year": ano,
+        "resolved_candidates_year": resolved_candidates_year,
+        "resolved_donations_year": resolved_donations_year,
+        "candidates_package": (cand_package or {}).get("name") if cand_package else None,
+        "donations_package": (presta_package or {}).get("name") if presta_package else None,
         "candidates_url": candidates_url,
         "assets_url": assets_url,
         "donations_url": donations_url,
@@ -995,7 +1786,7 @@ def sync_tse_donations_from_csv_url(
     Connector #3: ingest donations from TSE open-data CSV/ZIP URL.
     Expected to map campaign receipts to `doacao_recebida`.
     """
-    resp = requests.get(csv_url, timeout=60)
+    resp = _http_get_with_retry(csv_url, timeout=60, retries=3)
     resp.raise_for_status()
     text = _extract_csv_from_content(resp.content, csv_url)
 
@@ -1075,7 +1866,7 @@ def sync_tse_assets_from_csv_url(
     """
     Ingest TSE declared assets to support illicit enrichment analysis.
     """
-    resp = requests.get(csv_url, timeout=60)
+    resp = _http_get_with_retry(csv_url, timeout=60, retries=3)
     resp.raise_for_status()
     text = _extract_csv_from_content(resp.content, csv_url)
 
@@ -1168,7 +1959,7 @@ def sync_tse_candidates_from_csv_url(
     """
     Connector #5: ingest TSE candidatures metadata to strengthen identity resolution.
     """
-    resp = requests.get(csv_url, timeout=60)
+    resp = _http_get_with_retry(csv_url, timeout=60, retries=3)
     resp.raise_for_status()
     text = _extract_csv_from_content(resp.content, csv_url)
 
@@ -1473,6 +2264,10 @@ def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool =
             unexplained = float(analysis.excesso_nao_explicado or 0)
             compat = analysis.indice_compatibilidade
             ano = analysis.ano
+            if analysis.sinalizado and analysis.regra_disparo:
+                level_reason = analysis.regra_disparo
+            else:
+                level_reason = "Análise processada com dados suficientes para cálculo anual."
         else:
             score = 5.0 if has_records else 0.0
             level = "MINIMO" if has_records else "SEM_DADOS"
@@ -1483,6 +2278,12 @@ def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool =
                 .filter(FiscalFinancialRecord.person_id == person.id)
                 .scalar()
             )
+            if not has_records:
+                level_reason = "Sem registros financeiros ingeridos para a pessoa."
+            elif not sufficient_for_analysis:
+                level_reason = "Cobertura insuficiente para análise anual (falta patrimônio e/ou inflows)."
+            else:
+                level_reason = "Dados disponíveis, aguardando execução/atualização da análise."
 
         if (not include_sem_dados) and level == "SEM_DADOS":
             continue
@@ -1496,6 +2297,7 @@ def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool =
                 "ano_referencia": ano,
                 "risco_score": score,
                 "nivel_suspeita": level,
+                "motivo_nivel": level_reason,
                 "indice_compatibilidade": compat,
                 "excesso_nao_explicado": unexplained,
                 "sinalizado": bool(analysis.sinalizado) if analysis else False,
@@ -1517,12 +2319,58 @@ def get_overview(db: Session) -> Dict[str, Any]:
     total_results = db.query(func.count(FiscalAnalysisResult.id)).scalar() or 0
     total_flagged = db.query(func.count(FiscalAnalysisResult.id)).filter(FiscalAnalysisResult.sinalizado.is_(True)).scalar() or 0
 
+    active_with_records = (
+        db.query(func.count(func.distinct(FiscalFinancialRecord.person_id)))
+        .join(FiscalPerson, FiscalPerson.id == FiscalFinancialRecord.person_id)
+        .filter(FiscalPerson.ativo.is_(True))
+        .scalar()
+        or 0
+    )
+    active_with_assets = (
+        db.query(func.count(func.distinct(FiscalFinancialRecord.person_id)))
+        .join(FiscalPerson, FiscalPerson.id == FiscalFinancialRecord.person_id)
+        .filter(
+            FiscalPerson.ativo.is_(True),
+            FiscalFinancialRecord.tipo == "patrimonio_declarado",
+        )
+        .scalar()
+        or 0
+    )
+    active_with_inflows = (
+        db.query(func.count(func.distinct(FiscalFinancialRecord.person_id)))
+        .join(FiscalPerson, FiscalPerson.id == FiscalFinancialRecord.person_id)
+        .filter(
+            FiscalPerson.ativo.is_(True),
+            FiscalFinancialRecord.tipo.in_(["salario", "doacao_recebida", "financiamento_publico", "renda_extra"]),
+        )
+        .scalar()
+        or 0
+    )
+    active_with_analysis = (
+        db.query(func.count(func.distinct(FiscalAnalysisResult.person_id)))
+        .join(FiscalPerson, FiscalPerson.id == FiscalAnalysisResult.person_id)
+        .filter(FiscalPerson.ativo.is_(True))
+        .scalar()
+        or 0
+    )
+
+    sem_dados = max(0, int(active_people) - int(active_with_records))
+    minimo_sem_analise = max(0, int(active_with_records) - int(active_with_analysis))
+
     return {
         "pessoas_total": int(total_people),
         "pessoas_ativas": int(active_people),
         "registros_financeiros": int(total_records),
         "analises_total": int(total_results),
         "analises_sinalizadas": int(total_flagged),
+        "cobertura": {
+            "pessoas_com_registros": int(active_with_records),
+            "pessoas_com_patrimonio": int(active_with_assets),
+            "pessoas_com_inflows": int(active_with_inflows),
+            "pessoas_com_analise": int(active_with_analysis),
+            "sem_dados": sem_dados,
+            "minimo_sem_analise": minimo_sem_analise,
+        },
     }
 
 
@@ -1701,6 +2549,29 @@ def _detect_patterns_for_person(db: Session, person: FiscalPerson) -> List[Dict[
                     "confidence": 74,
                     "severity": "Alto",
                     "fontes": ["Portal Transparência", "TransfereGov"],
+                    "ano": year,
+                }
+            )
+
+    # P08 Dívida ativa x contratos ativos (proxy via dívida PGFN e inflows públicos/contratuais no mesmo ano)
+    for year, values in by_year.items():
+        divida_pgfn = values.get("divida_ativa_pgfn", Decimal("0"))
+        contratos = values.get("renda_extra", Decimal("0"))
+        financiamento = values.get("financiamento_publico", Decimal("0"))
+        if divida_pgfn > 0 and (contratos > 0 or financiamento > 0):
+            impacto = float(divida_pgfn + contratos + financiamento)
+            insights.append(
+                {
+                    "pattern_id": "P08",
+                    "titulo": "Dívida ativa × contratos ativos",
+                    "descricao": (
+                        f"Há dívida ativa PGFN ({divida_pgfn}) no mesmo período com contratos/financiamento "
+                        f"(contratos={contratos}, financiamento_publico={financiamento})."
+                    ),
+                    "impacto": impacto,
+                    "confidence": 81,
+                    "severity": "Alto",
+                    "fontes": ["PGFN Dívida Ativa", "PNCP/ComprasNet", "Portal Transparência"],
                     "ano": year,
                 }
             )

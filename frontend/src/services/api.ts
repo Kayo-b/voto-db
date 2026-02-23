@@ -261,6 +261,62 @@ export const api = {
     return response.data;
   },
 
+  syncSenadoExpenses: async (payload?: { ano?: number; maxSenadores?: number; maxLinhas?: number; csvUrl?: string }) => {
+    const response = await apiClient.post(
+      '/fiscal-investigation/sync/senado-expenses',
+      {
+        ano: payload?.ano,
+        max_senadores: payload?.maxSenadores ?? 100,
+        max_linhas: payload?.maxLinhas ?? 500000,
+        csv_url: payload?.csvUrl,
+      },
+      { timeout: 240000 }
+    );
+    return response.data;
+  },
+
+  syncSanctions: async (payload?: { cadastro?: 'ceis' | 'cnep' | 'ceaf' | 'cepim'; maxPaginas?: number; paginaInicial?: number; matchOnlyExisting?: boolean }) => {
+    const response = await apiClient.post(
+      '/fiscal-investigation/sync/sanctions',
+      {
+        cadastro: payload?.cadastro ?? 'ceis',
+        max_paginas: payload?.maxPaginas ?? 5,
+        pagina_inicial: payload?.paginaInicial ?? 1,
+        match_only_existing: payload?.matchOnlyExisting ?? true,
+      },
+      { timeout: 240000 }
+    );
+    return response.data;
+  },
+
+  syncPgfnDebts: async (payload: { csvUrl: string; ano?: number; maxLinhas?: number; matchOnlyExisting?: boolean }) => {
+    const response = await apiClient.post(
+      '/fiscal-investigation/sync/pgfn-debts',
+      {
+        csv_url: payload.csvUrl,
+        ano: payload.ano,
+        max_linhas: payload.maxLinhas ?? 200000,
+        match_only_existing: payload.matchOnlyExisting ?? true,
+      },
+      { timeout: 240000 }
+    );
+    return response.data;
+  },
+
+  syncSicaf: async (payload: { csvUrl: string; ano?: number; maxLinhas?: number; matchOnlyExisting?: boolean }) => {
+    const response = await apiClient.post(
+      '/fiscal-investigation/sync/sicaf',
+      {
+        csv_url: payload.csvUrl,
+        ano: payload.ano,
+        max_linhas: payload.maxLinhas ?? 200000,
+        match_only_existing: payload.matchOnlyExisting ?? true,
+      },
+      { timeout: 240000 }
+    );
+    return response.data;
+  },
+
   syncPncpContracts: async (payload: { dataInicial: string; dataFinal: string; maxPaginas?: number; tamanhoPagina?: number }) => {
     const response = await apiClient.post(
       '/fiscal-investigation/sync/pncp-contracts',
