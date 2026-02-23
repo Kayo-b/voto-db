@@ -259,7 +259,31 @@ class RecentVotacoesService:
 
         self.db.commit()
         logger.info(f"Stored {result['votos_stored']} votes for votacao {api_votacao_id}")
+
+        # Post only when new individual votes were stored for this votacao.
+        if result["votos_stored"] > 0:
+            self._try_post_twitter_update(api_votacao_id)
+
         return result
+
+    def _try_post_twitter_update(self, api_votacao_id: str) -> None:
+        """
+        Best-effort social posting hook.
+        Never raises, so vote ingestion is not impacted by bot failures.
+        """
+        try:
+            from .twitter_bot_service import post_votacao_to_twitter_if_needed
+
+            post_result = post_votacao_to_twitter_if_needed(self.db, api_votacao_id)
+            status = post_result.get("status", "unknown")
+            if status not in {"disabled", "already_posted"}:
+                logger.info("Twitter bot status for votacao %s: %s", api_votacao_id, status)
+        except Exception as exc:
+            logger.warning(
+                "Twitter bot hook failed for votacao %s: %s",
+                api_votacao_id,
+                exc,
+            )
 
     def get_stored_votos(self, api_votacao_id: str) -> List[Dict[str, Any]]:
         """

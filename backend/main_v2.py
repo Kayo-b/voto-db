@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from analisador_votacoes import AnalisadorVotacoes
 import asyncio
 from datetime import datetime
+import time
 import sys
 import logging
 
@@ -19,6 +20,7 @@ from database.import_service import import_deputados_from_json
 from database.voting_import_service import import_voting_history_from_json
 from database.connection import get_database
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 load_dotenv()
 
@@ -1011,23 +1013,209 @@ async def analisar_perfil_deputado_completa(
 @app.get("/deputados/{deputado_id}/votos-recentes")
 async def get_deputado_votos_recentes(
     deputado_id: int,
-    limit: int = 20,
+    limit: int = 5,
+    offset: int = 0,
+    scan_pages: int = 6,
     db: Session = Depends(get_database)
 ):
     """
-    Get deputy's votes from stored recent votacoes.
-    Returns votes that have been cached from the 'Votacoes Recentes' feature.
+    Get deputy voting activity by proposition (DB-first).
+    Returns latest vote per proposition with pagination and optional API enrichment.
     """
-    from database.recent_votacoes_service import get_deputado_stored_votes
+    from database.model import Voto, Votacao
+    from database.recent_votacoes_service import RecentVotacoesService
+
+    def build_activity_from_db() -> List[Dict[str, Any]]:
+        votos = (
+            db.query(Voto)
+            .join(Votacao)
+            .filter(
+                Voto.deputado_id == deputado_id,
+                Votacao.api_votacao_id.isnot(None)
+            )
+            .order_by(desc(Votacao.data_votacao))
+            .all()
+        )
+
+        activity: List[Dict[str, Any]] = []
+        seen_props = set()
+
+        for voto in votos:
+            votacao = voto.votacao
+            proposicao = votacao.proposicao
+
+            proposition_key = proposicao.id if proposicao else f"votacao:{votacao.api_votacao_id}"
+            if proposition_key in seen_props:
+                continue
+            seen_props.add(proposition_key)
+
+            if proposicao:
+                codigo = proposicao.codigo or f"{proposicao.tipo or ''} {proposicao.numero or ''}/{proposicao.ano or ''}".strip()
+                titulo = proposicao.titulo or proposicao.ementa or votacao.descricao or ""
+                proposicao_payload = {
+                    "id": proposicao.id,
+                    "codigo": codigo,
+                    "tipo": proposicao.tipo,
+                    "numero": proposicao.numero,
+                    "ano": proposicao.ano,
+                    "ementa": proposicao.ementa
+                }
+            else:
+                codigo = f"Votação {votacao.api_votacao_id}"
+                titulo = votacao.descricao or "Votação sem proposição associada"
+                proposicao_payload = None
+
+            activity.append({
+                "proposicao": proposicao_payload,
+                "proposicao_codigo": codigo,
+                "titulo": titulo,
+                "voto": voto.voto,
+                "data": votacao.data_votacao.isoformat() if votacao.data_votacao else "",
+                "votacao_id": votacao.api_votacao_id,
+                "sigla_orgao": votacao.sigla_orgao or "",
+                "tipo_votacao": votacao.tipo_votacao or ""
+            })
+
+        return activity
+
+    def enrich_from_api(target_count: int, max_pages: int) -> Dict[str, int]:
+        service = RecentVotacoesService(db)
+        stats = {
+            "api_pages_scanned": 0,
+            "votacoes_scanned": 0,
+            "new_votacoes_stored": 0,
+            "new_votos_stored": 0,
+            "matched_votacoes_for_deputado": 0
+        }
+        scan_started = time.monotonic()
+        max_votacoes_to_scan = 18
+        max_scan_seconds = 15
+
+        current_total = len(build_activity_from_db())
+        if current_total >= target_count:
+            return stats
+
+        page = 1
+        while page <= max_pages and current_total < target_count:
+            if stats["votacoes_scanned"] >= max_votacoes_to_scan:
+                break
+            if (time.monotonic() - scan_started) >= max_scan_seconds:
+                break
+
+            try:
+                response = requests.get(
+                    f"{CAMARA_BASE_URL}/votacoes",
+                    params={
+                        "ordem": "DESC",
+                        "ordenarPor": "dataHoraRegistro",
+                        "itens": 100,
+                        "pagina": page
+                    },
+                    timeout=20
+                )
+                response.raise_for_status()
+                votacoes_page = response.json().get("dados", [])
+                stats["api_pages_scanned"] += 1
+            except Exception:
+                break
+
+            if not votacoes_page:
+                break
+
+            for votacao in votacoes_page:
+                if stats["votacoes_scanned"] >= max_votacoes_to_scan:
+                    break
+                if (time.monotonic() - scan_started) >= max_scan_seconds:
+                    break
+
+                votacao_id = str(votacao.get("id", "")).strip()
+                if not votacao_id:
+                    continue
+
+                stats["votacoes_scanned"] += 1
+
+                if service.has_stored_votos(votacao_id):
+                    continue
+
+                existing = service.get_votacao_by_api_id(votacao_id)
+
+                merged_votacao = dict(votacao)
+                try:
+                    detalhe_resp = requests.get(f"{CAMARA_BASE_URL}/votacoes/{votacao_id}", timeout=5)
+                    if detalhe_resp.status_code == 200:
+                        detalhes = detalhe_resp.json().get("dados", {})
+                        proposicoes = detalhes.get("proposicoesAfetadas") or detalhes.get("objetosPossiveis") or []
+                        if proposicoes:
+                            merged_votacao["proposicao"] = proposicoes[0]
+                        merged_votacao["descricao"] = detalhes.get("descricao") or merged_votacao.get("descricao", "")
+                        merged_votacao["siglaOrgao"] = merged_votacao.get("siglaOrgao") or detalhes.get("siglaOrgao", "")
+                except Exception:
+                    pass
+
+                try:
+                    service.store_votacao_from_api(merged_votacao)
+                    if existing is None:
+                        stats["new_votacoes_stored"] += 1
+                except Exception:
+                    continue
+
+                try:
+                    votos_resp = requests.get(f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos", timeout=5)
+                    if votos_resp.status_code != 200:
+                        continue
+
+                    votos_data = votos_resp.json().get("dados", [])
+                    if not votos_data:
+                        continue
+
+                    if any(v.get("deputado_", {}).get("id") == deputado_id for v in votos_data):
+                        stats["matched_votacoes_for_deputado"] += 1
+
+                    stored = service.store_votos_for_votacao(votacao_id, votos_data)
+                    stats["new_votos_stored"] += int(stored.get("votos_stored", 0))
+                except Exception:
+                    continue
+
+            current_total = len(build_activity_from_db())
+            page += 1
+
+        return stats
 
     try:
-        votos = get_deputado_stored_votes(deputado_id, limit)
+        safe_limit = max(1, min(limit, 20))
+        safe_offset = max(0, offset)
+        safe_scan_pages = max(1, min(scan_pages, 10))
+        target_count = safe_offset + safe_limit
+
+        cached_activity = build_activity_from_db()
+        enrichment_stats = {
+            "api_pages_scanned": 0,
+            "votacoes_scanned": 0,
+            "new_votacoes_stored": 0,
+            "new_votos_stored": 0,
+            "matched_votacoes_for_deputado": 0
+        }
+
+        if len(cached_activity) < target_count:
+            enrichment_stats = enrich_from_api(target_count, safe_scan_pages)
+            cached_activity = build_activity_from_db()
+
+        page_data = cached_activity[safe_offset:safe_offset + safe_limit]
+        total_cached = len(cached_activity)
 
         return {
             "success": True,
-            "data": votos,
-            "total": len(votos),
-            "deputado_id": deputado_id
+            "data": page_data,
+            "total": len(page_data),
+            "deputado_id": deputado_id,
+            "source": "db_enriched" if enrichment_stats["api_pages_scanned"] > 0 else "db",
+            "pagination": {
+                "offset": safe_offset,
+                "limit": safe_limit,
+                "total_cached": total_cached,
+                "has_more": (safe_offset + len(page_data)) < total_cached
+            },
+            "enrichment": enrichment_stats
         }
     except Exception as e:
         print(f"Erro ao buscar votos recentes do deputado {deputado_id}: {e}")

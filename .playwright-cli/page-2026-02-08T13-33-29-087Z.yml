@@ -1,0 +1,100 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: V
+      - generic [ref=e7]:
+        - heading "VotoDB" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Sistema de Análise
+    - navigation [ref=e10]:
+      - button "Buscar Deputados" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+        - text: Buscar Deputados
+      - button "Proposições" [ref=e14] [cursor=pointer]:
+        - img [ref=e15]
+        - text: Proposições
+      - button "Análise Avançada" [ref=e17] [cursor=pointer]:
+        - img [ref=e18]
+        - text: Análise Avançada
+      - button "Votações Recentes" [ref=e20] [cursor=pointer]:
+        - img [ref=e21]
+        - text: Votações Recentes
+    - generic [ref=e24]:
+      - img [ref=e26]
+      - generic [ref=e28]:
+        - paragraph [ref=e29]: Dados Abertos
+        - paragraph [ref=e30]: Câmara dos Deputados
+  - generic [ref=e31]:
+    - banner [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e35]:
+          - heading "Buscar Deputados" [level=2] [ref=e36]
+          - paragraph [ref=e37]: Encontre e analise deputados federais
+        - generic [ref=e39]: API Online
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]:
+              - generic:
+                - img
+              - textbox "Digite o nome do deputado..." [ref=e46]: André
+            - button "Buscar" [ref=e47] [cursor=pointer]
+          - paragraph [ref=e48]: Pesquise por nome para encontrar deputados federais e analisar seus votos
+        - generic [ref=e60]:
+          - paragraph [ref=e61]: 5 deputados encontrados
+          - generic [ref=e62]:
+            - generic [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]:
+                - img "André Abdon" [ref=e65]
+                - generic [ref=e66]:
+                  - heading "André Abdon" [level=3] [ref=e67]
+                  - generic [ref=e68]:
+                    - generic [ref=e69]: PP
+                    - generic [ref=e70]: AP
+                  - paragraph [ref=e71]: dep.andreabdon@camara.leg.br
+                - img [ref=e72]
+              - button "Mais detalhes" [ref=e75]
+            - generic [ref=e76] [cursor=pointer]:
+              - generic [ref=e77]:
+                - img "André Fernandes" [ref=e78]
+                - generic [ref=e79]:
+                  - heading "André Fernandes" [level=3] [ref=e80]
+                  - generic [ref=e81]:
+                    - generic [ref=e82]: PL
+                    - generic [ref=e83]: CE
+                  - paragraph [ref=e84]: dep.andrefernandes@camara.leg.br
+                - img [ref=e85]
+              - button "Mais detalhes" [ref=e88]
+            - generic [ref=e89] [cursor=pointer]:
+              - generic [ref=e90]:
+                - img "André Ferreira" [ref=e91]
+                - generic [ref=e92]:
+                  - heading "André Ferreira" [level=3] [ref=e93]
+                  - generic [ref=e94]:
+                    - generic [ref=e95]: PL
+                    - generic [ref=e96]: PE
+                  - paragraph [ref=e97]: dep.andreferreira@camara.leg.br
+                - img [ref=e98]
+              - button "Mais detalhes" [ref=e101]
+            - generic [ref=e102] [cursor=pointer]:
+              - generic [ref=e103]:
+                - img "André Figueiredo" [ref=e104]
+                - generic [ref=e105]:
+                  - heading "André Figueiredo" [level=3] [ref=e106]
+                  - generic [ref=e107]:
+                    - generic [ref=e108]: PDT
+                    - generic [ref=e109]: CE
+                  - paragraph [ref=e110]: dep.andrefigueiredo@camara.leg.br
+                - img [ref=e111]
+              - button "Mais detalhes" [ref=e114]
+            - generic [ref=e115] [cursor=pointer]:
+              - generic [ref=e116]:
+                - img "André Janones" [ref=e117]
+                - generic [ref=e118]:
+                  - heading "André Janones" [level=3] [ref=e119]
+                  - generic [ref=e120]:
+                    - generic [ref=e121]: AVANTE
+                    - generic [ref=e122]: MG
+                  - paragraph [ref=e123]: dep.andrejanones@camara.leg.br
+                - img [ref=e124]
+              - button "Mais detalhes" [ref=e127]

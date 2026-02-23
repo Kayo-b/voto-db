@@ -67,3 +67,42 @@ export interface AnaliseDeputadoResponse {
   data?: AnaliseDeputado;
   message?: string;
 }
+
+export interface DeputadoVotoAtividade {
+  proposicao: {
+    id: number;
+    codigo: string;
+    tipo?: string;
+    numero?: string;
+    ano?: number;
+    ementa?: string;
+  } | null;
+  proposicao_codigo: string;
+  titulo: string;
+  voto: string;
+  data: string;
+  votacao_id: string;
+  sigla_orgao: string;
+  tipo_votacao: string;
+}
+
+export interface DeputadoVotosRecentesResponse {
+  success: boolean;
+  data: DeputadoVotoAtividade[];
+  total: number;
+  deputado_id: number;
+  source?: 'db' | 'db_enriched';
+  pagination?: {
+    offset: number;
+    limit: number;
+    total_cached: number;
+    has_more: boolean;
+  };
+  enrichment?: {
+    api_pages_scanned: number;
+    votacoes_scanned: number;
+    new_votacoes_stored: number;
+    new_votos_stored: number;
+    matched_votacoes_for_deputado: number;
+  };
+}

@@ -1,5 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
-import { DeputadosResponse, VotacoesResponse, AnaliseDeputadoResponse } from '../types/api';
+import {
+  DeputadosResponse,
+  VotacoesResponse,
+  AnaliseDeputadoResponse,
+  DeputadoVotosRecentesResponse
+} from '../types/api';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
@@ -167,9 +172,15 @@ export const api = {
     }
   },
 
-  getDeputadoVotosRecentes: async (deputadoId: number, limit: number = 20) => {
+  getDeputadoVotosRecentes: async (
+    deputadoId: number,
+    limit: number = 5,
+    offset: number = 0
+  ): Promise<DeputadoVotosRecentesResponse> => {
     try {
-      const response = await apiClient.get(`/deputados/${deputadoId}/votos-recentes?limit=${limit}`);
+      const response = await apiClient.get(
+        `/deputados/${deputadoId}/votos-recentes?limit=${limit}&offset=${offset}`
+      );
       return response.data;
     } catch (error) {
       console.error('Erro ao buscar votos recentes do deputado:', error);

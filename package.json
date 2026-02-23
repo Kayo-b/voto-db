@@ -6,7 +6,10 @@
   "directories": {
     "doc": "docs"
   },
-  "scripts": {},
+  "scripts": {
+    "twitter:auth": "npx --yes --package=playwright node backend/scripts/setup_twitter_auth_playwright.js",
+    "twitter:post:test": "npx --yes --package=playwright node backend/scripts/post_to_x_playwright.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kayo-b/voto-db.git"
