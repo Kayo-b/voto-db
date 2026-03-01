@@ -1004,7 +1004,7 @@ async def get_votos_votacao(votacao_id: str, db: Session = Depends(get_database)
         raise HTTPException(status_code=500, detail=f"Erro ao buscar votos: {str(e)}")
 
 @app.get("/deputados/{deputado_id}/analise")
-async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = True, limite_proposicoes: int = None, usar_cache: bool = True, db: Session = Depends(get_database)):
+async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = False, limite_proposicoes: int = None, usar_cache: bool = True, db: Session = Depends(get_database)):
     """
     Analyze deputy profile - first from database, then from government API if needed
     """
@@ -1479,6 +1479,7 @@ async def get_deputado_votos_recentes(
                     if existing is None:
                         stats["new_votacoes_stored"] += 1
                 except Exception:
+                    db.rollback()
                     continue
 
                 try:
@@ -1496,6 +1497,7 @@ async def get_deputado_votos_recentes(
                     stored = service.store_votos_for_votacao(votacao_id, votos_data)
                     stats["new_votos_stored"] += int(stored.get("votos_stored", 0))
                 except Exception:
+                    db.rollback()
                     continue
 
             current_total = len(build_activity_from_db())
@@ -1701,16 +1703,28 @@ async def get_proposicoes_monitoradas(
 
 
 @app.post("/proposicoes/monitoradas/sync")
-async def sync_proposicoes_monitoradas():
+async def sync_proposicoes_monitoradas(wait: bool = False):
     """
     Trigger manual sync for monitored propositions.
+    By default runs in background to avoid long client timeouts.
     """
     try:
-        result = await asyncio.to_thread(_run_monitor_sync_cycle)
+        if wait:
+            result = await asyncio.to_thread(_run_monitor_sync_cycle)
+            return {
+                "success": True,
+                "message": "Sincronização executada com sucesso",
+                "data": result
+            }
+
+        asyncio.create_task(asyncio.to_thread(_run_monitor_sync_cycle))
         return {
             "success": True,
-            "message": "Sincronização executada com sucesso",
-            "data": result
+            "message": "Sincronização iniciada em background",
+            "data": {
+                "status": "started",
+                "executado_em": datetime.now().isoformat()
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao sincronizar proposições monitoradas: {str(e)}")
@@ -1818,6 +1832,14 @@ async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Se
 
     try:
         from datetime import timedelta
+        scan_started = time.monotonic()
+        external_timeout = max(2, int(os.getenv("RECENTES_EXTERNAL_TIMEOUT_SECONDS", "8")))
+        max_api_items = max(5, int(os.getenv("RECENTES_MAX_API_ITEMS", "15")))
+        max_existing_votes_fetch = max(0, int(os.getenv("RECENTES_MAX_EXISTING_VOTES_FETCH", "3")))
+        max_processing_seconds = max(5, int(os.getenv("RECENTES_MAX_PROCESS_SECONDS", "15")))
+
+        def exceeded_budget() -> bool:
+            return (time.monotonic() - scan_started) >= max_processing_seconds
 
         data_inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
         data_fim = datetime.now().strftime("%Y-%m-%d")
@@ -1844,14 +1866,17 @@ async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Se
         new_votacoes_stored = 0
 
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, params=params, timeout=external_timeout)
             response.raise_for_status()
             data = response.json()
             raw_votacoes = data.get("dados", [])
             print(f"  Total de votações da API: {len(raw_votacoes)}")
 
             # Process API votações
-            for i, votacao in enumerate(raw_votacoes[:30]):  # Process up to 30
+            for i, votacao in enumerate(raw_votacoes[:max_api_items]):
+                if exceeded_budget():
+                    print("  Budget de processamento atingido durante coleta da API, encerrando scan.")
+                    break
                 votacao_id = str(votacao.get("id"))
 
                 # Skip if already in DB results
@@ -1862,7 +1887,7 @@ async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Se
                 try:
                     # Fetch details
                     detalhes_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}"
-                    det_response = requests.get(detalhes_url, timeout=5)
+                    det_response = requests.get(detalhes_url, timeout=external_timeout)
 
                     if det_response.status_code != 200:
                         continue
@@ -1930,7 +1955,7 @@ async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Se
                             if not has_stored_votos(votacao_id):
                                 try:
                                     votos_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
-                                    votos_response = requests.get(votos_url, timeout=10)
+                                    votos_response = requests.get(votos_url, timeout=external_timeout)
                                     if votos_response.status_code == 200:
                                         votos_data = votos_response.json().get("dados", [])
                                         if votos_data:
@@ -1952,16 +1977,23 @@ async def buscar_votacoes_recentes(dias: int = 7, tipo: str = "nominais", db: Se
         # STEP 3: Fetch missing votes for DB votações that don't have them yet
         print(f"STEP 3: Verificando votos faltantes para votações do banco...")
         votos_fetched_for_existing = 0
+        existing_fetch_attempts = 0
         for db_v in db_votacoes:
+            if exceeded_budget():
+                print("  Budget de processamento atingido durante atualização de votos existentes.")
+                break
             db_votacao_id = db_v.get("id")
             votos_count = db_v.get("votos_count", 0)
             tipo_vot = db_v.get("tipo_votacao", "")
 
             # Only fetch for nominal votações without stored votes
             if tipo_vot == "nominal" and votos_count == 0 and db_votacao_id:
+                if existing_fetch_attempts >= max_existing_votes_fetch:
+                    break
                 try:
+                    existing_fetch_attempts += 1
                     votos_url = f"{CAMARA_BASE_URL}/votacoes/{db_votacao_id}/votos"
-                    votos_response = requests.get(votos_url, timeout=10)
+                    votos_response = requests.get(votos_url, timeout=external_timeout)
                     if votos_response.status_code == 200:
                         votos_data = votos_response.json().get("dados", [])
                         if votos_data:
@@ -2349,6 +2381,10 @@ async def fiscal_sync_pgfn_debts(payload: FiscalPgfnSyncRequest, db: Session = D
         raise HTTPException(status_code=400, detail=str(exc))
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de dívida ativa/PGFN: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao baixar CSV de dívida ativa/PGFN: {str(exc)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar dívida ativa/PGFN: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/sicaf")
@@ -2368,6 +2404,10 @@ async def fiscal_sync_sicaf(payload: FiscalSicafSyncRequest, db: Session = Depen
         raise HTTPException(status_code=400, detail=str(exc))
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de habilitação/restrições SICAF: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao baixar CSV SICAF: {str(exc)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar SICAF: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/pncp-contracts")
@@ -2405,8 +2445,12 @@ async def fiscal_sync_donations(payload: FiscalDonationsSyncRequest, db: Session
         return {"success": True, "connector": "tse_donations_csv", "result": result}
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de doações: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao baixar CSV de doações: {str(exc)}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar doações TSE: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/assets")
@@ -2423,8 +2467,12 @@ async def fiscal_sync_assets(payload: FiscalAssetsSyncRequest, db: Session = Dep
         return {"success": True, "connector": "tse_assets_csv", "result": result}
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de bens do TSE: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao baixar CSV de bens do TSE: {str(exc)}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar bens do TSE: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/candidates")
@@ -2441,8 +2489,12 @@ async def fiscal_sync_candidates(payload: FiscalCandidatesSyncRequest, db: Sessi
         return {"success": True, "connector": "tse_candidates_csv", "result": result}
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao baixar CSV de candidaturas do TSE: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao baixar CSV de candidaturas do TSE: {str(exc)}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar candidaturas TSE: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/sync/tse-auto")
@@ -2460,8 +2512,12 @@ async def fiscal_sync_tse_auto(payload: FiscalTseAutoSyncRequest, db: Session = 
         return {"success": True, "connector": "tse_auto_ckan", "result": result}
     except requests.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao consultar CKAN do TSE: {str(exc)}")
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Erro de conexão ao consultar CKAN do TSE: {str(exc)}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao sincronizar TSE automático: {str(exc)}")
 
 
 @app.post("/fiscal-investigation/analyze")

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import requests
 import logging
+import os
 
 from .model import Proposicao
 from .connection import SessionLocal
@@ -15,6 +16,9 @@ from .connection import SessionLocal
 logger = logging.getLogger(__name__)
 
 CAMARA_BASE_URL = "https://dadosabertos.camara.leg.br/api/v2"
+VALIDATE_REQUEST_TIMEOUT_SECONDS = int(os.getenv("PROPOSICAO_VALIDATE_REQUEST_TIMEOUT_SECONDS", "4"))
+VALIDATE_MAX_VOTACOES_CHECK = int(os.getenv("PROPOSICAO_VALIDATE_MAX_VOTACOES_CHECK", "4"))
+VALIDATE_MAX_NOMINAL_VOTACOES = int(os.getenv("PROPOSICAO_VALIDATE_MAX_NOMINAL_VOTACOES", "2"))
 
 
 class ProposicaoService:
@@ -71,7 +75,7 @@ class ProposicaoService:
             }
             
             logger.info(f"Searching for proposição: {codigo}")
-            response = requests.get(search_url, params=params, timeout=10)
+            response = requests.get(search_url, params=params, timeout=VALIDATE_REQUEST_TIMEOUT_SECONDS)
             
             if response.status_code != 200:
                 return {
@@ -95,7 +99,11 @@ class ProposicaoService:
             votacoes_url = f"{CAMARA_BASE_URL}/proposicoes/{proposicao_id}/votacoes"
             logger.info(f"Fetching votações for proposição ID: {proposicao_id}")
             
-            votacoes_response = requests.get(votacoes_url, timeout=10)
+            votacoes_response = requests.get(
+                votacoes_url,
+                params={"itens": VALIDATE_MAX_VOTACOES_CHECK},
+                timeout=VALIDATE_REQUEST_TIMEOUT_SECONDS
+            )
             
             if votacoes_response.status_code != 200:
                 return {
@@ -115,14 +123,14 @@ class ProposicaoService:
             # Step 3: Check for nominal votações
             nominal_votacoes = []
             
-            for votacao in votacoes:
+            for votacao in votacoes[:VALIDATE_MAX_VOTACOES_CHECK]:
                 votacao_id = votacao['id']
                 
                 # Get votos to check if it's nominal
                 votos_url = f"{CAMARA_BASE_URL}/votacoes/{votacao_id}/votos"
                 
                 try:
-                    votos_response = requests.get(votos_url, timeout=10)
+                    votos_response = requests.get(votos_url, timeout=VALIDATE_REQUEST_TIMEOUT_SECONDS)
                     
                     if votos_response.status_code == 200:
                         votos_data = votos_response.json()
@@ -137,6 +145,8 @@ class ProposicaoService:
                                 'total_votos': len(votos)
                             })
                             logger.info(f"Found nominal voting: {votacao_id} with {len(votos)} votes")
+                            if len(nominal_votacoes) >= VALIDATE_MAX_NOMINAL_VOTACOES:
+                                break
                 
                 except Exception as e:
                     logger.warning(f"Error checking votação {votacao_id}: {e}")

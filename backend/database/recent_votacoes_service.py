@@ -5,9 +5,11 @@ Stores votacoes and individual votos in the database for quick retrieval.
 
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
+from sqlalchemy.exc import IntegrityError
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+import os
 
 from .connection import SessionLocal
 from .model import Proposicao, Votacao, Voto, Deputado, Partido, Legislatura
@@ -115,20 +117,30 @@ class RecentVotacoesService:
         prop_id = proposicao_data.get('id') or proposicao_data.get('codProposicao')
         if not prop_id:
             return None
+        try:
+            prop_id = int(prop_id)
+        except (TypeError, ValueError):
+            return None
 
-        # Check if exists
+        tipo = proposicao_data.get('siglaTipo', proposicao_data.get('codTipo', ''))
+        numero = str(proposicao_data.get('numero', ''))
+        ano = proposicao_data.get('ano', datetime.now().year)
+        codigo = f"{tipo} {numero}/{ano}".strip()
+
+        # Check by ID first
         existing = self.db.query(Proposicao).filter(Proposicao.id == prop_id).first()
         if existing:
             return existing.id
 
-        # Create minimal proposicao record
-        tipo = proposicao_data.get('siglaTipo', proposicao_data.get('codTipo', ''))
-        numero = str(proposicao_data.get('numero', ''))
-        ano = proposicao_data.get('ano', datetime.now().year)
+        # Then check by unique codigo to avoid duplicate-code insert failures.
+        if codigo:
+            existing_codigo = self.db.query(Proposicao).filter(Proposicao.codigo == codigo).first()
+            if existing_codigo:
+                return existing_codigo.id
 
         proposicao = Proposicao(
             id=prop_id,
-            codigo=f"{tipo} {numero}/{ano}".strip(),
+            codigo=codigo,
             titulo=proposicao_data.get('ementa', '')[:500] if proposicao_data.get('ementa') else f"{tipo} {numero}/{ano}",
             ementa=proposicao_data.get('ementa', ''),
             tipo=tipo,
@@ -139,8 +151,18 @@ class RecentVotacoesService:
         )
 
         self.db.add(proposicao)
-        self.db.commit()
-        self.db.refresh(proposicao)
+        try:
+            self.db.commit()
+            self.db.refresh(proposicao)
+        except IntegrityError:
+            # Keep session usable and fallback to existing row inserted previously.
+            self.db.rollback()
+            existing_after_conflict = self.db.query(Proposicao).filter(
+                or_(Proposicao.id == prop_id, Proposicao.codigo == codigo)
+            ).first()
+            if existing_after_conflict:
+                return existing_after_conflict.id
+            raise
 
         logger.info(f"Created proposicao {proposicao.codigo}")
         return proposicao.id
@@ -271,6 +293,11 @@ class RecentVotacoesService:
         Best-effort social posting hook.
         Never raises, so vote ingestion is not impacted by bot failures.
         """
+        # Autopost is explicitly opt-in to avoid unintended social publishing.
+        auto_post_enabled = os.getenv("TWITTER_AUTO_POST_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+        if not auto_post_enabled:
+            return
+
         try:
             from .twitter_bot_service import post_votacao_to_twitter_if_needed
 
