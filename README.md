@@ -58,14 +58,27 @@ npm install axios --legacy-peer-deps
 
 O script:
 - inicializa o schema do banco automaticamente;
+- carrega a lista inicial de proposições relevantes no banco quando ele está vazio;
 - usa SQLite local (`sqlite:///./tmp/local_run.db`) quando `DATABASE_URL` não está definida;
-- sobe backend em `127.0.0.1:8001` e frontend em `127.0.0.1:3000`.
+- sobe backend em `127.0.0.1:8001` e frontend em `127.0.0.1:3000`;
+- aponta o frontend para a mesma porta configurada no backend via `REACT_APP_API_URL`;
+- se a porta padrão estiver ocupada e nenhuma porta tiver sido forçada por variável de ambiente, escolhe automaticamente a próxima porta livre.
+
+Se `8001` ou `3000` já estiverem em uso:
+
+```bash
+BACKEND_PORT=8012 FRONTEND_PORT=3002 ./run_app
+```
 
 #### Backend
 ```bash
-cd backend
-PYTHONPATH=/path/to/venv/lib/python3.13/site-packages python -m uvicorn main_v2:app --host 127.0.0.1 --port 8001
+python -m uvicorn backend.main_v2:app --host 127.0.0.1 --port 8001
 ```
+
+Ao iniciar dessa forma, o backend:
+- cria o schema automaticamente;
+- carrega `backend/data/proposicoes.json` no banco na primeira execução;
+- lê `backend/.env` automaticamente.
 
 #### Frontend
 ```bash
@@ -203,6 +216,15 @@ python test_sistema.py
 ```bash
 curl http://localhost:8001/health
 ```
+
+## Passos aplicados para colocar o projeto de pé
+
+1. Ajustado o backend para iniciar corretamente com `python -m uvicorn backend.main_v2:app`, sem depender de `PYTHONPATH` manual.
+2. Configurada a leitura automática de `backend/.env` pelo backend.
+3. Adicionada inicialização automática do schema do banco na subida da API.
+4. Adicionado bootstrap da lista padrão de proposições relevantes a partir de `backend/data/proposicoes.json` quando o banco está vazio.
+5. Corrigida a montagem da query de `/deputados`, que quebrava o fallback para a API da Câmara.
+6. Atualizado `run_app.sh` para sincronizar a URL da API do frontend com a porta real do backend, inclusive quando `BACKEND_PORT` é alterada.
 
 ## Deploy
 

@@ -1,31 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "Iniciando VotoDB..."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-echo "Iniciando PostgreSQL..."
-cd ~/projects/voto-db
-./postgres.sh status > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    ./postgres.sh restart
-    echo "PostgreSQL iniciado"
-else
-    echo "PostgreSQL já está rodando"
+if [[ -f "$ROOT_DIR/backend/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/backend/.env"
+  set +a
 fi
 
-sleep 2
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  echo "DATABASE_URL nao definido. Tentando iniciar PostgreSQL local..."
+  if ./postgres.sh start; then
+    if ./postgres.sh verify-schema >/dev/null 2>&1; then
+      export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/votodb"
+      echo "Usando PostgreSQL local em ${DATABASE_URL}"
+    else
+      echo "Schema PostgreSQL local esta desatualizado para o backend atual. Usando launcher padrao."
+    fi
+  else
+    echo "Nao foi possivel iniciar PostgreSQL. Continuando com o launcher padrao."
+  fi
+fi
 
-echo "Iniciando Backend API..."
-cd ~/projects/voto-db/backend
-../.venv/bin/python main_v2.py > /tmp/voto-backend.log 2>&1 &
-BACKEND_PID=$!
-echo "Backend iniciado (PID: $BACKEND_PID)"
-
-sleep 3
-
-echo "Iniciando Frontend React..."
-cd ~/projects/voto-db/frontend
-npm start
-
-echo "Encerrando serviços..."
-kill $BACKEND_PID 2>/dev/null
-echo "Sistema encerrado"
+exec "$ROOT_DIR/run_app.sh" "$@"

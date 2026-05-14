@@ -356,6 +356,58 @@ def _month_date_from_mes_ano(mes_ano: int) -> datetime:
     return datetime(year, month, 1)
 
 
+def _summarize_portal_remuneracao(remuneracoes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Build a typed summary of remuneration payload while preserving source-level raw rows.
+    """
+    total_liquido = Decimal("0")
+    total_bruto = Decimal("0")
+    total_deducoes = Decimal("0")
+    total_beneficios = Decimal("0")
+    total_verbas_indenizatorias = Decimal("0")
+    totals_by_field: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+
+    for rem in remuneracoes:
+        itens = rem.get("remuneracoesDTO", []) or []
+        for item in itens:
+            liquido = _parse_brl_value(item.get("valorTotalRemuneracaoAposDeducoes"))
+            bruto = _parse_brl_value(
+                item.get("valorTotalRemuneracaoBruta")
+                or item.get("valorRemuneracaoBasicaBruta")
+                or item.get("valorRemuneracaoBasica")
+            )
+            deducoes = _parse_brl_value(item.get("valorTotalDeducoes"))
+            if deducoes <= 0 and bruto > 0 and liquido > 0 and bruto >= liquido:
+                deducoes = bruto - liquido
+
+            total_liquido += liquido
+            total_bruto += bruto
+            total_deducoes += deducoes
+
+            for field_name, raw_value in item.items():
+                if "valor" not in str(field_name).lower():
+                    continue
+                field_value = _parse_brl_value(raw_value)
+                if field_value <= 0:
+                    continue
+
+                totals_by_field[field_name] = totals_by_field[field_name] + field_value
+                lowered = str(field_name).lower()
+                if any(token in lowered for token in ["auxilio", "beneficio", "vantagem"]):
+                    total_beneficios += field_value
+                if any(token in lowered for token in ["inden", "diaria", "ajuda"]):
+                    total_verbas_indenizatorias += field_value
+
+    return {
+        "total_liquido": total_liquido,
+        "total_bruto": total_bruto,
+        "total_deducoes": total_deducoes,
+        "total_beneficios": total_beneficios,
+        "total_verbas_indenizatorias": total_verbas_indenizatorias,
+        "totais_por_campo": totals_by_field,
+    }
+
+
 def _parse_date_flexible(value: Any) -> Optional[datetime]:
     if value is None:
         return None
@@ -673,11 +725,8 @@ def sync_portal_transparencia_servidores_remuneracao(
                     ingested_people += 1
                     continue
 
-                total_remuneracao = Decimal("0")
-                for rem in remuneracoes:
-                    itens = rem.get("remuneracoesDTO", []) or []
-                    for item in itens:
-                        total_remuneracao += _parse_brl_value(item.get("valorTotalRemuneracaoAposDeducoes"))
+                breakdown = _summarize_portal_remuneracao(remuneracoes)
+                total_remuneracao = breakdown["total_liquido"]
 
                 if total_remuneracao > 0:
                     _upsert_financial_record(
@@ -693,6 +742,18 @@ def sync_portal_transparencia_servidores_remuneracao(
                             "mes_ano": mes_ano,
                             "portal_transparencia_id": servidor_id,
                             "registros_remuneracao": len(remuneracoes),
+                            "resumo_remuneracao": {
+                                "total_liquido": float(breakdown["total_liquido"]),
+                                "total_bruto": float(breakdown["total_bruto"]),
+                                "total_deducoes": float(breakdown["total_deducoes"]),
+                                "total_beneficios": float(breakdown["total_beneficios"]),
+                                "total_verbas_indenizatorias": float(breakdown["total_verbas_indenizatorias"]),
+                                "totais_por_campo": {
+                                    field_name: float(field_value)
+                                    for field_name, field_value in breakdown["totais_por_campo"].items()
+                                },
+                            },
+                            "remuneracoes_raw": remuneracoes,
                         },
                         data_referencia=ref_date,
                     )
@@ -2207,7 +2268,12 @@ def get_suspects(db: Session, min_risk_score: float = 50.0, limit: int = 100) ->
     return suspects
 
 
-def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool = False) -> List[Dict[str, Any]]:
+def get_people_ranking(
+    db: Session,
+    limit: int = 5000,
+    include_sem_dados: bool = False,
+    include_raw_records: bool = False,
+) -> List[Dict[str, Any]]:
     """
     Return all active people with latest analysis and risk categorization.
     """
@@ -2237,15 +2303,62 @@ def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool =
         .all()
     )
 
-    result: List[Dict[str, Any]] = []
-    for person, analysis in rows:
+    person_ids = [person.id for person, _ in rows]
+
+    coverage_by_person: Dict[int, Dict[str, int]] = {}
+    totals_by_person: Dict[int, Dict[str, float]] = {}
+    if person_ids:
         coverage_rows = (
-            db.query(FiscalFinancialRecord.tipo, func.count(FiscalFinancialRecord.id))
-            .filter(FiscalFinancialRecord.person_id == person.id)
-            .group_by(FiscalFinancialRecord.tipo)
+            db.query(
+                FiscalFinancialRecord.person_id.label("person_id"),
+                FiscalFinancialRecord.tipo.label("tipo"),
+                func.count(FiscalFinancialRecord.id).label("total_registros"),
+                func.coalesce(func.sum(FiscalFinancialRecord.valor), 0).label("total_valor"),
+            )
+            .filter(FiscalFinancialRecord.person_id.in_(person_ids))
+            .group_by(FiscalFinancialRecord.person_id, FiscalFinancialRecord.tipo)
             .all()
         )
-        coverage_by_type = {tipo: int(count) for tipo, count in coverage_rows}
+        for row in coverage_rows:
+            person_coverage = coverage_by_person.setdefault(int(row.person_id), {})
+            person_coverage[row.tipo] = int(row.total_registros or 0)
+
+            person_totals = totals_by_person.setdefault(int(row.person_id), {})
+            person_totals[row.tipo] = float(row.total_valor or 0)
+
+    raw_records_by_person: Dict[int, List[Dict[str, Any]]] = {}
+    if include_raw_records and person_ids:
+        raw_rows = (
+            db.query(FiscalFinancialRecord)
+            .filter(FiscalFinancialRecord.person_id.in_(person_ids))
+            .order_by(
+                FiscalFinancialRecord.person_id.asc(),
+                FiscalFinancialRecord.ano.desc(),
+                FiscalFinancialRecord.data_referencia.desc().nullslast(),
+                FiscalFinancialRecord.id.desc(),
+            )
+            .all()
+        )
+        for rec in raw_rows:
+            raw_records_by_person.setdefault(int(rec.person_id), []).append(
+                {
+                    "id": rec.id,
+                    "ano": rec.ano,
+                    "tipo": rec.tipo,
+                    "valor": float(rec.valor or 0),
+                    "moeda": rec.moeda,
+                    "fonte": rec.fonte,
+                    "fonte_url": rec.fonte_url,
+                    "confianca": float(rec.confianca or 0),
+                    "data_referencia": rec.data_referencia.isoformat() if rec.data_referencia else None,
+                    "extra_json": rec.extra_json or {},
+                }
+            )
+
+    result: List[Dict[str, Any]] = []
+    for person, analysis in rows:
+        coverage_by_type = coverage_by_person.get(person.id, {})
+        totals_by_type = totals_by_person.get(person.id, {})
         coverage_types = sorted(list(coverage_by_type.keys()))
         has_records = bool(coverage_types)
         sufficient_for_analysis = (
@@ -2306,8 +2419,11 @@ def get_people_ranking(db: Session, limit: int = 5000, include_sem_dados: bool =
                     "registros_por_tipo": coverage_by_type,
                     "suficiente_para_analise": sufficient_for_analysis,
                 },
+                "totais_por_tipo": totals_by_type,
             }
         )
+        if include_raw_records:
+            result[-1]["raw_records"] = raw_records_by_person.get(person.id, [])
 
     return result
 

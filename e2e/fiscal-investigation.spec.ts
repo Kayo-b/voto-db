@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('fiscal investigation connectors and ranking flow', async ({ page, request }) => {
-  const apiBase = 'http://127.0.0.1:8001';
+  const apiBase = process.env.E2E_API_BASE_URL || process.env.REACT_APP_API_URL || 'http://127.0.0.1:18001';
 
   const seed = await request.post(`${apiBase}/fiscal-investigation/demo-seed`);
   expect(seed.ok()).toBeTruthy();

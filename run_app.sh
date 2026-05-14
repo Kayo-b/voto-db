@@ -32,6 +32,11 @@ if [[ -f "$ROOT_DIR/backend/.env" ]]; then
   set +a
 fi
 
+BACKEND_PORT_EXPLICIT=false
+FRONTEND_PORT_EXPLICIT=false
+[[ -n "${BACKEND_PORT+x}" ]] && BACKEND_PORT_EXPLICIT=true
+[[ -n "${FRONTEND_PORT+x}" ]] && FRONTEND_PORT_EXPLICIT=true
+
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 export PYTHONPATH="${PYTHONPATH:-$ROOT_DIR/backend}"
@@ -67,6 +72,35 @@ PY
   return 1
 }
 
+resolve_free_port() {
+  local requested_port="$1"
+  local label="$2"
+  local explicit_override="$3"
+  local candidate="$requested_port"
+
+  if [[ "$explicit_override" == "true" ]]; then
+    if port_in_use "$candidate"; then
+      echo "Porta do ${label} (${candidate}) ja esta em uso."
+      echo "Escolha outra porta para ${label^^}_PORT ou finalize o processo atual."
+      exit 1
+    fi
+    echo "$candidate"
+    return 0
+  fi
+
+  if ! port_in_use "$candidate"; then
+    echo "$candidate"
+    return 0
+  fi
+
+  while port_in_use "$candidate"; do
+    candidate=$((candidate + 1))
+  done
+
+  echo "Porta padrao do ${label} (${requested_port}) ocupada. Usando ${candidate}." >&2
+  echo "$candidate"
+}
+
 # Use local SQLite by default so run_app works without PostgreSQL.
 if [[ -z "${DATABASE_URL:-}" ]]; then
   export DATABASE_URL="sqlite:///./tmp/local_run.db"
@@ -95,17 +129,9 @@ if ! init_schema; then
   init_schema
 fi
 
-if port_in_use "$BACKEND_PORT"; then
-  echo "Porta do backend (${BACKEND_PORT}) ja esta em uso."
-  echo "Defina BACKEND_PORT para outra porta ou finalize o processo atual."
-  exit 1
-fi
-
-if port_in_use "$FRONTEND_PORT"; then
-  echo "Porta do frontend (${FRONTEND_PORT}) ja esta em uso."
-  echo "Defina FRONTEND_PORT para outra porta ou finalize o processo atual."
-  exit 1
-fi
+BACKEND_PORT="$(resolve_free_port "$BACKEND_PORT" "backend" "$BACKEND_PORT_EXPLICIT")"
+FRONTEND_PORT="$(resolve_free_port "$FRONTEND_PORT" "frontend" "$FRONTEND_PORT_EXPLICIT")"
+export REACT_APP_API_URL="${REACT_APP_API_URL:-http://127.0.0.1:${BACKEND_PORT}}"
 
 cleanup() {
   echo ""
@@ -127,6 +153,7 @@ if ! kill -0 "$BACK_PID" 2>/dev/null; then
 fi
 
 echo "Iniciando frontend em http://127.0.0.1:${FRONTEND_PORT}"
+echo "Frontend apontando para API em ${REACT_APP_API_URL}"
 BROWSER=none PORT="$FRONTEND_PORT" npm --prefix frontend start &
 FRONT_PID=$!
 

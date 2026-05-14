@@ -11,7 +11,21 @@ import {
   DeputadoVotosRecentesResponse
 } from '../types/api';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+const resolveApiBase = (): string => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    return `${protocol}//${hostname}:8001`;
+  }
+
+  return 'http://localhost:8001';
+};
+
+const API_BASE = resolveApiBase();
 
 const apiClient = axios.create({
   baseURL: API_BASE,
@@ -19,6 +33,8 @@ const apiClient = axios.create({
 });
 
 export const api = {
+  getBaseUrl: (): string => API_BASE,
+
   searchDeputados: async (nome?: string): Promise<DeputadosResponse> => {
     try {
       const response: AxiosResponse<DeputadosResponse> = await apiClient.get(
@@ -148,11 +164,15 @@ export const api = {
       }
       
       console.error('Erro ao analisar deputado:', error);
+      const errorMessage =
+        axios.isAxiosError(error)
+          ? error.response?.data?.detail || error.response?.data?.message || 'Erro ao conectar com a API'
+          : 'Erro ao conectar com a API';
       
       // Return error response structure
       return {
         success: false,
-        message: 'Erro ao conectar com a API'
+        message: errorMessage
       };
     }
   },
@@ -215,7 +235,7 @@ export const api = {
     if (params?.minRatioCompatibilidade !== undefined) query.set('min_ratio_compatibilidade', String(params.minRatioCompatibilidade));
     const suffix = query.toString() ? `?${query.toString()}` : '';
 
-    const response = await apiClient.post(`/fiscal-investigation/analyze${suffix}`);
+    const response = await apiClient.post(`/fiscal-investigation/analyze${suffix}`, null, { timeout: 300000 });
     return response.data;
   },
 
@@ -393,9 +413,13 @@ export const api = {
 
   getFiscalPeopleRanking: async (
     limit: number = 5000,
-    includeSemDados: boolean = false
+    includeSemDados: boolean = false,
+    includeRawRecords: boolean = false,
   ): Promise<{ success: boolean; total: number; dados: FiscalPersonRanking[] }> => {
-    const response = await apiClient.get(`/fiscal-investigation/people-ranking?limit=${limit}&include_sem_dados=${includeSemDados}`);
+    const response = await apiClient.get(
+      `/fiscal-investigation/people-ranking?limit=${limit}&include_sem_dados=${includeSemDados}&include_raw_records=${includeRawRecords}`,
+      { timeout: 180000 }
+    );
     return response.data;
   },
 

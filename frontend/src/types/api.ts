@@ -107,14 +107,30 @@ export interface FiscalPersonRanking {
   ano_referencia?: number;
   risco_score: number;
   nivel_suspeita: 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'MINIMO' | 'SEM_DADOS';
+  motivo_nivel?: string;
   indice_compatibilidade?: number;
   excesso_nao_explicado: number;
   sinalizado: boolean;
+  totais_por_tipo?: Record<string, number>;
   cobertura?: {
     tipos: string[];
     registros_por_tipo: Record<string, number>;
     suficiente_para_analise: boolean;
   };
+  raw_records?: FiscalRawRecord[];
+}
+
+export interface FiscalRawRecord {
+  id: number;
+  ano: number;
+  tipo: string;
+  valor: number;
+  moeda: string;
+  fonte: string;
+  fonte_url?: string;
+  confianca: number;
+  data_referencia?: string;
+  extra_json?: Record<string, unknown>;
 }
 
 export interface RadarGovInsight {

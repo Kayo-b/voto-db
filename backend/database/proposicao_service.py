@@ -6,6 +6,8 @@ Validates proposals against government API and stores them in database.
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
+from pathlib import Path
+import json
 import requests
 import logging
 import os
@@ -19,6 +21,7 @@ CAMARA_BASE_URL = "https://dadosabertos.camara.leg.br/api/v2"
 VALIDATE_REQUEST_TIMEOUT_SECONDS = int(os.getenv("PROPOSICAO_VALIDATE_REQUEST_TIMEOUT_SECONDS", "4"))
 VALIDATE_MAX_VOTACOES_CHECK = int(os.getenv("PROPOSICAO_VALIDATE_MAX_VOTACOES_CHECK", "4"))
 VALIDATE_MAX_NOMINAL_VOTACOES = int(os.getenv("PROPOSICAO_VALIDATE_MAX_NOMINAL_VOTACOES", "2"))
+DEFAULT_PROPOSICOES_FILE = Path(__file__).resolve().parent.parent / "data" / "proposicoes.json"
 
 
 class ProposicaoService:
@@ -302,6 +305,75 @@ class ProposicaoService:
         except Exception as e:
             logger.error(f"Error fetching proposições: {e}")
             return []
+
+    def bootstrap_default_proposicoes(self, seed_path: Optional[Path] = None) -> Dict[str, int]:
+        """
+        Populate the database with the curated default proposition list on first run.
+        """
+        if self.db.query(Proposicao.id).first():
+            return {"inserted": 0, "skipped": 0}
+
+        source_path = Path(seed_path) if seed_path else DEFAULT_PROPOSICOES_FILE
+        if not source_path.exists():
+            logger.warning("Default proposições seed file not found: %s", source_path)
+            return {"inserted": 0, "skipped": 0}
+
+        with source_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        inserted = 0
+        skipped = 0
+        for entry in payload.get("votacoes_historicas", []):
+            tipo = (entry.get("tipo") or "").strip()
+            numero_bruto = str(entry.get("numero") or "").strip()
+            numero, _, ano_str = numero_bruto.partition("/")
+            if not tipo or not numero or not ano_str:
+                skipped += 1
+                continue
+
+            try:
+                ano = int(ano_str)
+            except ValueError:
+                skipped += 1
+                continue
+
+            proposicao_id_raw = entry.get("id_proposicao")
+            try:
+                proposicao_id = int(proposicao_id_raw) if proposicao_id_raw is not None else None
+            except (TypeError, ValueError):
+                proposicao_id = None
+
+            codigo = f"{tipo} {numero}/{ano}"
+            existing = None
+            if proposicao_id is not None:
+                existing = self.db.query(Proposicao).filter(Proposicao.id == proposicao_id).first()
+            if existing is None:
+                existing = self.db.query(Proposicao).filter(Proposicao.codigo == codigo).first()
+            if existing is not None:
+                skipped += 1
+                continue
+
+            proposicao = Proposicao(
+                id=proposicao_id,
+                codigo=codigo,
+                titulo=(entry.get("titulo") or codigo).strip(),
+                ementa=(entry.get("impacto") or "").strip() or None,
+                tipo=tipo,
+                numero=numero,
+                ano=ano,
+                uri=(
+                    f"{CAMARA_BASE_URL}/proposicoes/{proposicao_id}"
+                    if proposicao_id is not None
+                    else None
+                ),
+                relevancia=(entry.get("relevancia") or "média").strip(),
+            )
+            self.db.add(proposicao)
+            inserted += 1
+
+        self.db.commit()
+        logger.info("Bootstrapped %s default proposições from %s", inserted, source_path)
+        return {"inserted": inserted, "skipped": skipped}
     
     def delete_proposicao_relevante(self, proposicao_id: int) -> Dict[str, Any]:
         """
@@ -397,6 +469,12 @@ def get_all_proposicoes_relevantes(relevancia: Optional[str] = None) -> List[Dic
     """Get all relevant proposições"""
     with ProposicaoService() as service:
         return service.get_proposicoes_relevantes(relevancia)
+
+
+def bootstrap_default_proposicoes(seed_path: Optional[Path] = None) -> Dict[str, int]:
+    """Populate the default curated proposition set on first startup."""
+    with ProposicaoService() as service:
+        return service.bootstrap_default_proposicoes(seed_path)
 
 
 def remove_proposicao(proposicao_id: int) -> Dict[str, Any]:

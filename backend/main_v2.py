@@ -4,21 +4,26 @@ import redis
 import requests
 import json
 import os
+from pathlib import Path
+from urllib.parse import urlencode
 from dotenv import load_dotenv
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
-from analisador_votacoes import AnalisadorVotacoes
 import asyncio
 from datetime import datetime
 import time
 import sys
 import logging
 
-# Add database imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
+BACKEND_DIR = Path(__file__).resolve().parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from analisador_votacoes import AnalisadorVotacoes
 from database.import_service import import_deputados_from_json
 from database.voting_import_service import import_voting_history_from_json
-from database.connection import get_database
+from database.connection import create_tables, get_database
+from database.proposicao_service import bootstrap_default_proposicoes
 from database.fiscal_investigation_service import (
     list_open_data_sources,
     list_source_domains,
@@ -48,7 +53,7 @@ from database.fiscal_investigation_service import (
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-load_dotenv()
+load_dotenv(BACKEND_DIR / ".env")
 
 app = FastAPI(
     title="VotoDB - Sistema de Análise de Votações",
@@ -94,6 +99,16 @@ last_fiscal_sync: Dict[str, Any] = {
     "status": "not_started",
     "resultado": {}
 }
+
+
+def _build_deputados_endpoint(nome: Optional[str] = None) -> str:
+    params = {
+        "ordem": "ASC",
+        "ordenarPor": "nome",
+    }
+    if nome:
+        params["nome"] = nome
+    return f"/deputados?{urlencode(params)}"
 
 class ProposicaoRequest(BaseModel):
     tipo: str
@@ -464,6 +479,9 @@ async def start_background_monitoring():
     """
     global auto_sync_task
 
+    create_tables()
+    bootstrap_default_proposicoes()
+
     auto_sync_stop_event.clear()
     if auto_sync_task is None or auto_sync_task.done():
         auto_sync_task = asyncio.create_task(_auto_sync_loop())
@@ -536,13 +554,13 @@ async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
             
             return {
                 "dados": dados,
-                "links": [{"rel": "self", "href": f"/deputados{'?nome=' + nome if nome else ''}"}]
+                "links": [{"rel": "self", "href": _build_deputados_endpoint(nome)}]
             }
         
         # STEP 2: Not found in database, fetch from government API
         print(f"DB Miss: Deputados not found in database, fetching from government API")
         
-        endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
+        endpoint = _build_deputados_endpoint(nome)
         cache_key = f"deputados:{nome or 'all'}"
         
         # Fetch from government API
@@ -562,7 +580,7 @@ async def get_deputados(nome: str = None, db: Session = Depends(get_database)):
     except Exception as e:
         print(f"Error in get_deputados: {e}")
         # Fallback to API if database fails
-        endpoint = f"/deputados{'?nome=' + nome if nome else ''}&ordem=ASC&ordenarPor=nome"
+        endpoint = _build_deputados_endpoint(nome)
         cache_key = f"deputados:{nome or 'all'}"
         return await fetch_with_cache(endpoint, cache_key, CACHE_TTL["deputados"])
 
@@ -657,6 +675,106 @@ def get_demo_votacoes(deputado_id: int) -> List[Dict]:
     }
     
     return demo_data.get(deputado_id, [])
+
+
+def _build_cached_analysis_from_database(db: Session, deputado_id: int) -> Optional[Dict[str, Any]]:
+    from database.model import Deputado, Voto, Votacao, Proposicao
+
+    deputado = db.query(Deputado).filter(Deputado.id == deputado_id).first()
+    votos = (
+        db.query(Voto)
+        .join(Votacao)
+        .outerjoin(Proposicao)
+        .filter(Voto.deputado_id == deputado_id)
+        .order_by(desc(Votacao.data_votacao))
+        .all()
+    )
+
+    if not votos:
+        return None
+
+    historico_votacoes = []
+    votos_favoraveis = 0
+    votos_contrarios = 0
+    abstencoes = 0
+    obstrucoes = 0
+    ausencias = 0
+
+    for index, voto in enumerate(votos):
+        voto_normalizado = (voto.voto or "").strip().lower()
+
+        if voto_normalizado == "sim":
+            votos_favoraveis += 1
+        elif voto_normalizado in {"não", "nao"}:
+            votos_contrarios += 1
+        elif voto_normalizado in {"abstenção", "abstencao"}:
+            abstencoes += 1
+        elif voto_normalizado in {"obstrução", "obstrucao"}:
+            obstrucoes += 1
+        elif voto_normalizado == "ausente":
+            ausencias += 1
+
+        if index >= 10:
+            continue
+
+        votacao = voto.votacao
+        proposicao = votacao.proposicao if votacao else None
+        codigo_proposicao = (
+            proposicao.codigo
+            if proposicao and proposicao.codigo
+            else f"Votação {votacao.api_votacao_id}" if votacao and votacao.api_votacao_id
+            else f"Votação {votacao.id}" if votacao and votacao.id
+            else "Votação sem proposição"
+        )
+        titulo_proposicao = (
+            proposicao.titulo
+            if proposicao and proposicao.titulo
+            else proposicao.ementa
+            if proposicao and proposicao.ementa
+            else votacao.descricao
+            if votacao and votacao.descricao
+            else ""
+        )
+
+        historico_votacoes.append({
+            "proposicao": codigo_proposicao,
+            "titulo": titulo_proposicao,
+            "voto": voto.voto,
+            "data": votacao.data_votacao.isoformat() if votacao and votacao.data_votacao else "",
+            "relevancia": proposicao.relevancia if proposicao and proposicao.relevancia else "baixa",
+        })
+
+    total_votacoes_analisadas = len(votos)
+    participacao = total_votacoes_analisadas - ausencias
+    presenca_percentual = round((participacao / total_votacoes_analisadas) * 100, 1) if total_votacoes_analisadas else 0.0
+
+    return {
+        "deputado": {
+            "id": deputado_id,
+            "nome": deputado.nome if deputado else f"Deputado {deputado_id}",
+            "nome_parlamentar": (
+                deputado.nome_parlamentar
+                if deputado and deputado.nome_parlamentar
+                else deputado.nome
+                if deputado and deputado.nome
+                else f"Deputado {deputado_id}"
+            ),
+            "partido": deputado.partido.sigla if deputado and deputado.partido else "N/A",
+            "uf": deputado.sigla_uf if deputado else "N/A",
+            "situacao": deputado.situacao if deputado and deputado.situacao else "N/A",
+        },
+        "historico_votacoes": historico_votacoes,
+        "estatisticas": {
+            "total_votacoes_analisadas": total_votacoes_analisadas,
+            "participacao": participacao,
+            "presenca_percentual": presenca_percentual,
+            "votos_favoraveis": votos_favoraveis,
+            "votos_contrarios": votos_contrarios,
+            "abstencoes": abstencoes,
+            "obstrucoes": obstrucoes,
+            "ausencias": ausencias,
+        },
+    }
 
 @app.get("/deputados/{deputado_id}/votacoes")
 async def get_deputado_votacoes(deputado_id: int, db: Session = Depends(get_database)):
@@ -1066,6 +1184,15 @@ async def analisar_perfil_deputado(deputado_id: int, incluir_todas: bool = False
                 "success": True,
                 "data": analysis_data,
                 "message": "Análise carregada do banco de dados"
+            }
+
+        cached_analysis = _build_cached_analysis_from_database(db, deputado_id)
+        if cached_analysis:
+            print(f"DB Hit: Built cached analysis for deputado {deputado_id} from stored votes")
+            return {
+                "success": True,
+                "data": cached_analysis,
+                "message": "Análise rápida gerada a partir dos votos salvos no banco de dados"
             }
         
         # STEP 2: Not found in database, proceed with API analysis
@@ -1578,19 +1705,14 @@ async def clear_cache(cache_type: str = "all"):
 @app.get("/estatisticas/geral")
 async def get_estatisticas_gerais():
     try:
-        # Get proposições from database instead of hardcoded JSON
         from database.proposicao_service import get_all_proposicoes_relevantes
+
         proposicoes_db = get_all_proposicoes_relevantes()
-        
-        # Convert to expected format
-        dados_proposicoes = {
-            "votacoes_historicas": [{
-                "id_proposicao": prop['id'],
-                "tipo": f"{prop['tipo']} {prop['numero']}/{prop['ano']}",
-                "numero": f"{prop['numero']}/{prop['ano']}",
-                "titulo": prop['titulo']
-            } for prop in proposicoes_db]
-        }
+        categorias = sorted({prop.get("relevancia") for prop in proposicoes_db if prop.get("relevancia")})
+        ultima_atualizacao = max(
+            (prop.get("created_at") for prop in proposicoes_db if prop.get("created_at")),
+            default=None,
+        )
         
         cache_stats = {"total_cached": 0}
         if r:
@@ -1607,13 +1729,13 @@ async def get_estatisticas_gerais():
         return {
             "success": True,
             "data": {
-                "proposicoes_relevantes": len(dados_proposicoes.get("proposicoes_relevantes", [])),
-                "categorias": list(dados_proposicoes.get("categorias", {}).keys()),
+                "proposicoes_relevantes": len(proposicoes_db),
+                "categorias": categorias,
                 "cache": cache_stats,
                 "sistema": {
                     "versao": "2.0.0",
                     "redis_disponivel": r is not None,
-                    "ultima_atualizacao": dados_proposicoes.get("metadados", {}).get("ultima_atualizacao")
+                    "ultima_atualizacao": ultima_atualizacao,
                 }
             }
         }
@@ -2567,9 +2689,15 @@ async def fiscal_suspects(
 async def fiscal_people_ranking(
     limit: int = 5000,
     include_sem_dados: bool = False,
+    include_raw_records: bool = False,
     db: Session = Depends(get_database),
 ):
-    rows = get_people_ranking(db, limit=limit, include_sem_dados=include_sem_dados)
+    rows = get_people_ranking(
+        db,
+        limit=limit,
+        include_sem_dados=include_sem_dados,
+        include_raw_records=include_raw_records,
+    )
     return {
         "success": True,
         "total": len(rows),

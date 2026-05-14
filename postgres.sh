@@ -1,115 +1,220 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "VotoDB PostgreSQL Management"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-case "$1" in
-    "start")
-        echo "Starting PostgreSQL with Docker..."
-        # If container already exists, just start it instead of trying to recreate.
-        if docker ps -a --format "{{.Names}}" | grep -q "^votodb-postgres$"; then
-            echo "Container votodb-postgres already exists. Starting existing container..."
-            docker start votodb-postgres > /dev/null
-        else
-            docker run -d \
-                --name votodb-postgres \
-                -e POSTGRES_DB=votodb \
-                -e POSTGRES_USER=postgres \
-                -e POSTGRES_PASSWORD=postgres \
-                -p 5432:5432 \
-                -v votodb_data:/var/lib/postgresql/data \
-                postgres:15
-        fi
-        
-        echo "Waiting for PostgreSQL to be ready..."
-        sleep 5
-        
-        # Test connection
-        if docker exec votodb-postgres pg_isready; then
-            echo "PostgreSQL is running!"
-            echo "Connection: postgresql://postgres:postgres@localhost:5432/votodb"
-        else
-            echo "PostgreSQL failed to start"
-            exit 1
-        fi
-        ;;
-    
-    "stop")
-        echo "Stopping PostgreSQL..."
-        docker stop votodb-postgres
-        ;;
-    
-    "restart")
-        echo "Restarting PostgreSQL..."
-        docker restart votodb-postgres
-        ;;
-    
-    "logs")
-        echo "PostgreSQL logs:"
-        docker logs votodb-postgres
-        ;;
-    
-    "shell")
-        echo "Connecting to PostgreSQL shell..."
-        docker exec -it votodb-postgres psql -U postgres -d votodb
-        ;;
-    
-    "status")
-        if docker ps --format "table {{.Names}}\t{{.Status}}" | grep -q "votodb-postgres"; then
-            echo "PostgreSQL is running"
-            docker ps --filter name=votodb-postgres --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-        else
-            echo "PostgreSQL is not running"
-        fi
-        ;;
-    
-    "init")
-        echo "Initializing database..."
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        cd "$SCRIPT_DIR"
-        ./.venv/bin/python init_database.py
-        ;;
-    
-    "stats")
-        echo "Database statistics:"
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        cd "$SCRIPT_DIR"
-        ./.venv/bin/python - <<'PY'
-from backend.database.connection import SessionLocal
-from backend.database.model import Deputado, Proposicao, Votacao, Voto
+CONTAINER_NAME="votodb-postgres"
+DEFAULT_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/votodb"
 
-with SessionLocal() as db:
-    print("deputados:", db.query(Deputado).count())
-    print("proposicoes:", db.query(Proposicao).count())
-    print("votacoes:", db.query(Votacao).count())
-    print("votos:", db.query(Voto).count())
-PY
-        ;;
-    
-    "backup")
-        echo "Creating database backup..."
-        docker exec votodb-postgres pg_dump -U postgres votodb > "backup_votodb_$(date +%Y%m%d_%H%M%S).sql"
-        echo "Backup saved as backup_votodb_$(date +%Y%m%d_%H%M%S).sql"
-        ;;
-    
-    *)
-        echo "VotoDB PostgreSQL Management"
-        echo ""
-        echo "Usage: $0 {start|stop|restart|status|logs|shell|init|stats|backup}"
-        echo ""
-        echo "Commands:"
-        echo "  start    - Start PostgreSQL in Docker container"
-        echo "  stop     - Stop PostgreSQL container"  
-        echo "  restart  - Restart PostgreSQL container"
-        echo "  status   - Check if PostgreSQL is running"
-        echo "  logs     - Show PostgreSQL logs"
-        echo "  shell    - Connect to PostgreSQL command line"
-        echo "  init     - Initialize VotoDB database schema"
-        echo "  stats    - Show database statistics"
-        echo "  backup   - Create database backup"
-        echo ""
-        echo "Examples:"
-        echo "  ./postgres.sh start     # Start database"
-        echo "  ./postgres.sh init      # Setup tables"
-        echo "  ./postgres.sh status    # Check status"
-        ;;
+if [[ -f "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+elif [[ -f "$ROOT_DIR/backend/venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/backend/venv/bin/python"
+elif [[ -f "$ROOT_DIR/venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/venv/bin/python"
+else
+  PYTHON_BIN="python3"
+fi
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker nao encontrado."
+    exit 1
+  fi
+}
+
+container_exists() {
+  docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"
+}
+
+container_running() {
+  docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"
+}
+
+ensure_database_env() {
+  export DATABASE_URL="${DATABASE_URL:-$DEFAULT_DATABASE_URL}"
+}
+
+verify_schema() {
+  docker exec "$CONTAINER_NAME" psql -U postgres -d votodb -At -c "
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_name = 'votacoes'
+      AND column_name IN ('api_votacao_id', 'tipo_votacao', 'sigla_orgao', 'aprovacao');
+  " | grep -qx '4'
+}
+
+case "${1:-}" in
+  start)
+    require_docker
+    echo "Starting PostgreSQL with Docker..."
+
+    if container_exists; then
+      if container_running; then
+        echo "Container ${CONTAINER_NAME} already running."
+      else
+        docker start "$CONTAINER_NAME" >/dev/null
+      fi
+    else
+      docker run -d \
+        --name "$CONTAINER_NAME" \
+        -e POSTGRES_DB=votodb \
+        -e POSTGRES_USER=postgres \
+        -e POSTGRES_PASSWORD=postgres \
+        -p 5432:5432 \
+        -v votodb_data:/var/lib/postgresql/data \
+        postgres:15 >/dev/null
+    fi
+
+    echo "Waiting for PostgreSQL to be ready..."
+    for _ in $(seq 1 15); do
+      if docker exec "$CONTAINER_NAME" pg_isready -U postgres -d votodb >/dev/null 2>&1; then
+        echo "PostgreSQL is running!"
+        echo "Connection: ${DEFAULT_DATABASE_URL}"
+        exit 0
+      fi
+      sleep 1
+    done
+
+    echo "PostgreSQL failed to start"
+    exit 1
+    ;;
+
+  stop)
+    require_docker
+    if ! container_exists; then
+      echo "Container ${CONTAINER_NAME} does not exist."
+      exit 0
+    fi
+    if ! container_running; then
+      echo "PostgreSQL is already stopped."
+      exit 0
+    fi
+    echo "Stopping PostgreSQL..."
+    docker stop "$CONTAINER_NAME" >/dev/null
+    ;;
+
+  restart)
+    require_docker
+    if container_exists; then
+      echo "Restarting PostgreSQL..."
+      docker restart "$CONTAINER_NAME" >/dev/null
+    else
+      "$0" start
+    fi
+    ;;
+
+  logs)
+    require_docker
+    if ! container_exists; then
+      echo "Container ${CONTAINER_NAME} does not exist."
+      exit 1
+    fi
+    docker logs "$CONTAINER_NAME"
+    ;;
+
+  shell)
+    require_docker
+    if ! container_running; then
+      echo "PostgreSQL is not running."
+      exit 1
+    fi
+    exec docker exec -it "$CONTAINER_NAME" psql -U postgres -d votodb
+    ;;
+
+  status)
+    require_docker
+    if container_running; then
+      echo "PostgreSQL is running"
+      docker ps --filter "name=^${CONTAINER_NAME}$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      exit 0
+    fi
+
+    if container_exists; then
+      echo "PostgreSQL container exists but is stopped"
+    else
+      echo "PostgreSQL container does not exist"
+    fi
+    exit 1
+    ;;
+
+  init)
+    require_docker
+    if ! container_running; then
+      echo "PostgreSQL is not running. Start it first with ./postgres.sh start"
+      exit 1
+    fi
+    ensure_database_env
+    echo "Initializing database..."
+    "$PYTHON_BIN" init_database.py
+    if verify_schema; then
+      echo "PostgreSQL schema looks compatible with the current backend."
+      exit 0
+    fi
+    echo "PostgreSQL schema is older than the current backend models."
+    echo "init_database.py created missing tables but did not upgrade existing ones."
+    exit 1
+    ;;
+
+  stats)
+    require_docker
+    if ! container_running; then
+      echo "PostgreSQL is not running. Start it first with ./postgres.sh start"
+      exit 1
+    fi
+    docker exec "$CONTAINER_NAME" psql -U postgres -d votodb -At -F '|' -c \
+      "SELECT 'deputados', COUNT(*) FROM deputados
+       UNION ALL SELECT 'proposicoes', COUNT(*) FROM proposicoes
+       UNION ALL SELECT 'votacoes', COUNT(*) FROM votacoes
+       UNION ALL SELECT 'votos', COUNT(*) FROM votos;" \
+      | awk -F'|' '{print $1 ": " $2}'
+    ;;
+
+  verify-schema)
+    require_docker
+    if ! container_running; then
+      echo "PostgreSQL is not running."
+      exit 1
+    fi
+    if verify_schema; then
+      echo "PostgreSQL schema is compatible with current startup scripts."
+      exit 0
+    fi
+    echo "PostgreSQL schema is outdated for the current backend."
+    exit 1
+    ;;
+
+  backup)
+    require_docker
+    if ! container_running; then
+      echo "PostgreSQL is not running."
+      exit 1
+    fi
+    backup_file="backup_votodb_$(date +%Y%m%d_%H%M%S).sql"
+    echo "Creating database backup..."
+    docker exec "$CONTAINER_NAME" pg_dump -U postgres votodb > "$backup_file"
+    echo "Backup saved as $backup_file"
+    ;;
+
+  *)
+    cat <<'EOF'
+VotoDB PostgreSQL Management
+
+Usage: ./postgres.sh {start|stop|restart|status|logs|shell|init|stats|backup|verify-schema}
+
+Commands:
+  start    - Start PostgreSQL in Docker container
+  stop     - Stop PostgreSQL container
+  restart  - Restart PostgreSQL container
+  status   - Check if PostgreSQL is running
+  logs     - Show PostgreSQL logs
+  shell    - Connect to PostgreSQL command line
+  init     - Initialize VotoDB database schema using PostgreSQL
+  stats    - Show PostgreSQL-backed database statistics
+  backup   - Create database backup
+  verify-schema - Check whether PostgreSQL matches current backend columns
+EOF
+    exit 1
+    ;;
 esac

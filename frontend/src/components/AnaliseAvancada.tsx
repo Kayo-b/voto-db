@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { api } from '../services/api';
 
 interface AnaliseDeputado {
   deputado: {
@@ -45,11 +46,9 @@ const AnaliseAvancada: React.FC<AnaliseAvancadaProps> = ({ deputadoId }) => {
       setLoading(true);
       setError('');
       
-      const url = `http://localhost:8001/deputados/${deputadoInput}/analise${incluirTodas ? '?incluir_todas=true' : ''}`;
-      const response = await fetch(url);
-      const result = await response.json();
+      const result = await api.analisarDeputado(Number(deputadoInput), incluirTodas);
 
-      if (result.success) {
+      if (result.success && result.data) {
         setAnalise(result.data);
         // console.log(result.dat.deputado, 'DATA');
       } else {
